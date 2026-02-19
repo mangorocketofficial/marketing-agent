@@ -4,7 +4,10 @@ import { PostChannel } from './post';
 export type BusinessType =
   | 'cafe'           // 카페
   | 'restaurant'     // 음식점
-  | 'beauty'         // 미용실/네일샵
+  | 'beauty-nail'    // 네일샵
+  | 'beauty-hair'    // 미용실
+  | 'beauty-skin'    // 피부관리
+  | 'beauty-makeup'  // 메이크업
   | 'clinic'         // 병원/의원
   | 'fitness'        // 피트니스/요가
   | 'academy'        // 학원/교육
