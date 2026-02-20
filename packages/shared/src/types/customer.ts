@@ -1,19 +1,21 @@
 import { PostChannel } from './post';
 
-// 고객 업종
-export type BusinessType =
-  | 'cafe'           // 카페
-  | 'restaurant'     // 음식점
-  | 'beauty-nail'    // 네일샵
-  | 'beauty-hair'    // 미용실
-  | 'beauty-skin'    // 피부관리
-  | 'beauty-makeup'  // 메이크업
-  | 'clinic'         // 병원/의원
-  | 'fitness'        // 피트니스/요가
-  | 'academy'        // 학원/교육
-  | 'other';         // 기타
+// NGO 조직 분야
+// 마케팅 콘텐츠의 톤과 키워드 전략이 분야별로 달라지므로 구분한다.
+export type OrganizationType =
+  | 'environment'       // 환경
+  | 'education'         // 교육
+  | 'human-rights'      // 인권
+  | 'animal'            // 동물 보호
+  | 'welfare'           // 복지 (아동, 노인, 장애인 등)
+  | 'health'            // 보건/의료
+  | 'culture'           // 문화/예술
+  | 'community'         // 지역사회/마을
+  | 'international'     // 국제 협력/개발
+  | 'other';            // 기타
 
 // 포스팅 스케줄 설정
+// 어떤 채널에, 얼마나 자주, 언제 발행할지를 정의한다.
 export interface PostingSchedule {
   channels: PostChannel[];      // 발행할 채널 목록
   postsPerDay: number;          // 하루 포스팅 수
@@ -21,21 +23,28 @@ export interface PostingSchedule {
   daysOfWeek: number[];         // 발행 요일 (0=일, 1=월, ... 6=토)
 }
 
-// 고객 정보
+// NGO 고객(단체) 정보
+// 이 프로젝트의 "고객"은 마케팅 서비스를 이용하는 NGO 단체를 의미한다.
 export interface Customer {
   id: string;
-  name: string;                  // 업체명
-  businessType: BusinessType;    // 업종
-  keywords: string[];            // 마케팅 키워드 (예: ['강남카페', '브런치맛집'])
-  location: string;              // 지역 (예: '서울 강남구')
+  name: string;                        // 단체명 (예: '초록우산 어린이재단')
+  organizationType: OrganizationType;  // 조직 분야
+  description: string;                 // 단체 소개 (LLM 콘텐츠 생성 시 참조)
+  mission: string;                     // 미션/비전 (콘텐츠 톤과 방향 결정에 사용)
+  keywords: string[];                  // 마케팅 키워드 (예: ['아동복지', '기부캠페인'])
+  location: string;                    // 소재지 (예: '서울 마포구')
 
-  schedule: PostingSchedule;     // 포스팅 스케줄 설정
+  schedule: PostingSchedule;           // 포스팅 스케줄 설정
 
-  naverBlogId?: string;          // 네이버 블로그 ID (있는 경우)
-  instagramAccount?: string;     // 인스타그램 계정
-  telegramChatId?: string;       // 텔레그램 알림 받을 chat ID
+  // 발행 채널 계정 정보
+  naverBlogId?: string;                // 네이버 블로그 ID
+  instagramAccount?: string;           // 인스타그램 계정
+  threadsAccount?: string;             // 쓰레드 계정
+  blogUrl?: string;                    // Next.js 블로그 URL
 
-  isActive: boolean;             // 서비스 활성 상태
+  telegramChatId?: string;             // 텔레그램 알림 받을 chat ID
+
+  isActive: boolean;                   // 서비스 활성 상태
   createdAt: string;
   updatedAt: string;
 }
