@@ -1,5 +1,7 @@
 import { PostChannel, PostStatus } from '../types/post';
-import { BusinessType } from '../types/customer';
+import { OrganizationType } from '../types/customer';
+import { AgentTaskType } from '../types/agent';
+import { ReportType } from '../types/report';
 
 // ── 채널 관련 ──
 
@@ -11,15 +13,15 @@ export const ALL_CHANNELS: PostChannel[] = [
   'nextjs-blog',
 ];
 
-// 클라우드 서버에서 직접 발행 가능한 채널
-export const CLOUD_CHANNELS: PostChannel[] = [
+// 서버에서 자동 발행하는 채널
+export const AUTO_CHANNELS: PostChannel[] = [
   'instagram',
   'threads',
   'nextjs-blog',
 ];
 
-// 로컬 Electron 경유가 필요한 채널
-export const LOCAL_CHANNELS: PostChannel[] = [
+// 유저가 검수 후 수동으로 발행하는 채널
+export const MANUAL_CHANNELS: PostChannel[] = [
   'naver-blog',
 ];
 
@@ -33,39 +35,50 @@ export const CHANNEL_LABELS: Record<PostChannel, string> = {
 
 // ── 포스팅 상태 관련 ──
 
-// 상태 한글 이름 매핑
 export const STATUS_LABELS: Record<PostStatus, string> = {
   draft: '초안',
-  pending: '승인 대기',
+  review: '검수 중',
   approved: '승인됨',
   publishing: '발행 중',
   published: '발행 완료',
   failed: '발행 실패',
 };
 
-// ── 업종 관련 ──
+// ── NGO 조직 분야 관련 ──
 
-// 업종 한글 이름 매핑
-export const BUSINESS_TYPE_LABELS: Record<BusinessType, string> = {
-  'cafe': '카페',
-  'restaurant': '음식점',
-  'beauty-nail': '네일샵',
-  'beauty-hair': '미용실',
-  'beauty-skin': '피부관리',
-  'beauty-makeup': '메이크업',
-  'clinic': '병원/의원',
-  'fitness': '피트니스/요가',
-  'academy': '학원/교육',
+export const ORGANIZATION_TYPE_LABELS: Record<OrganizationType, string> = {
+  'environment': '환경',
+  'education': '교육',
+  'human-rights': '인권',
+  'animal': '동물 보호',
+  'welfare': '복지',
+  'health': '보건/의료',
+  'culture': '문화/예술',
+  'community': '지역사회/마을',
+  'international': '국제 협력',
   'other': '기타',
 };
 
-// ── 에이전트 통신 관련 ──
+// ── Agent 관련 ──
 
-export const HEARTBEAT_INTERVAL_MS = 30_000;        // heartbeat 전송 주기: 30초
-export const HEARTBEAT_TIMEOUT_MS = 90_000;          // 이 시간 동안 heartbeat 없으면 오프라인 판정: 90초
-export const COMMAND_TIMEOUT_MS = 300_000;            // 명령 실행 타임아웃: 5분
+export const AGENT_TASK_LABELS: Record<AgentTaskType, string> = {
+  'marketing-strategy': '마케팅 전략 수립',
+  'schedule-posts': '포스팅 스케줄링',
+  'analyze-performance': '성과 분석',
+  'competitor-report': '경쟁업체 분석',
+  'donor-report': '후원자 리포트 생성',
+};
 
-// ── 포스팅 관련 ──
+// ── 리포트 관련 ──
+
+export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  'marketing-daily': '일간 마케팅 리포트',
+  'marketing-weekly': '주간 마케팅 리포트',
+  'donor-weekly': '주간 후원자 리포트',
+};
+
+// ── 수치 상수 ──
 
 export const MAX_RETRY_COUNT = 3;                     // 발행 실패 시 최대 재시도 횟수
 export const DEFAULT_POSTS_PER_DAY = 1;               // 기본 하루 포스팅 수
+export const DONOR_REPORT_DAY = 1;                    // 후원자 리포트 발송 요일 (1=월요일)
