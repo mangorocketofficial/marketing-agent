@@ -16,12 +16,8 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Electron build output
-out/
-release/
-
-# Playwright
-playwright/.cache/
+# Next.js
+.next/
 
 # Logs
 *.log

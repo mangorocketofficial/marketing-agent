@@ -1,8 +1,9 @@
 // Types
 export * from './types/post';
 export * from './types/customer';
-export * from './types/command';
+export * from './types/donor';
 export * from './types/report';
+export * from './types/agent';
 
 // Constants
 export * from './constants';
