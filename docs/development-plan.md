@@ -4,6 +4,11 @@
 
 ## 프로젝트 개요
 
+## 진행 현황 (2026-02-20)
+
+- [x] Phase 1 완료 (`packages/shared` 타입/상수 정리 완료)
+- [x] Phase 2 착수 (`2-1 package.json` 반영 완료)
+
 | 항목 | 내용 |
 |------|------|
 | 대상 | 소규모 NGO 조직 |
@@ -36,8 +41,8 @@ marketing-agent/
 | 순서 | 파일 | 작업 |
 |------|------|------|
 | 1-1 | `types/customer.ts` | NGO 조직 특화로 수정 (BusinessType 변경) |
-| 1-2 | `types/donor.ts` | 후원자(Donor) 인터페이스 작성 |
-| 1-3 | `types/report.ts` | 후원자 리포트 타입 추가 |
+| 1-2 | `types/donor.ts` | 후원자 이메일 수신자 최소 타입(PII 최소화) 정의 |
+| 1-3 | `types/report.ts` | 마케팅 리포트 타입(채널 성과 중심) 정리 |
 | 1-4 | `types/agent.ts` | AI agent 전략/분석 관련 타입 작성 |
 | 1-5 | `types/post.ts` | 필요 시 미세 조정 |
 | 1-6 | `constants/index.ts` | Electron 상수 제거, NGO/후원자 관련 상수 추가 |
@@ -52,6 +57,22 @@ marketing-agent/
 
 안쪽(DB)에서 바깥쪽(API)으로 진행한다.
 
+### Phase 2 시작 체크리스트
+
+- [x] WSL 개발환경 전환 완료 (Node.js 22+, npm, Git, Docker)
+- [x] `2-1` `apps/server/package.json` 의존성/스크립트 설정
+- [x] `2-2` `apps/server/tsconfig.json` TypeScript 설정 (base 상속)
+- [x] DB 선택 확정 (개발: SQLite / 운영: PostgreSQL)
+- [x] 로컬 PostgreSQL/Redis 실행 방식 확정 (Docker Compose 권장)
+- [x] `.env`/`.env.example` 작성 (DB, Redis, OpenAI, SMTP, Meta, Telegram)
+- [x] `2-3` DB 스키마 초안 작성 (`db/schema.ts`)
+- [x] `2-4` DB 연결 설정 구현 (`db/index.ts`)
+- [x] `2-5` Express 서버 부팅 및 라우트 등록 (`index.ts`)
+- [x] `2-6` API 인증 방식 확정 및 미들웨어 기본 구현 (`api/middleware/auth.ts`)
+- [x] BullMQ + Redis 연결 테스트 (큐 enqueue/dequeue 최소 1개)
+- [x] 2-A 완료 기준 확인 후 2-B(API 라우트)로 진행
+- 참고: Redis 테스트는 Docker Desktop `docker.exe`로 컨테이너 기동 후 검증 완료
+
 ### 2-A. 서버 기초
 
 | 순서 | 파일 | 작업 |
@@ -65,14 +86,42 @@ marketing-agent/
 
 ### 2-B. API 라우트
 
+### Phase 2-B 진행 체크리스트
+
+- [x] `2-7` `api/routes/customers.ts` NGO 고객 CRUD
+- [x] `2-8` `api/routes/posts.ts` 포스팅 CRUD + 상태 관리
+- [x] `2-9` `api/routes/donors.ts` 이메일 수신자 CRUD
+- [x] `2-10` `api/routes/reports.ts` 리포트 조회 API
+
 | 순서 | 파일 | 작업 |
 |------|------|------|
 | 2-7 | `api/routes/customers.ts` | NGO 고객 CRUD |
 | 2-8 | `api/routes/posts.ts` | 포스팅 CRUD + 상태 관리 |
-| 2-9 | `api/routes/donors.ts` | 후원자 CRUD |
+| 2-9 | `api/routes/donors.ts` | 이메일 수신자 CRUD |
 | 2-10 | `api/routes/reports.ts` | 리포트 조회 API |
 
 ### 2-C. 서비스 레이어
+
+### Phase 2-C 진행 체크리스트
+
+- 원칙: `daily/weekly` 리포트는 마케팅 채널 성과(발행/도달/반응) 전용으로 운영하고, 후원자 데이터는 리포트 집계에서 분리한다.
+- 원칙: 후원자 영역은 별도 이메일 콘텐츠 제작/발송 옵션으로 관리한다.
+
+- [x] `2-11` `services/content/templates.ts` NGO 특화 콘텐츠 템플릿
+- [x] `2-12` `services/content/generator.ts` LLM 기반 콘텐츠 생성
+- [x] `2-13` `services/publishing/queue.ts` BullMQ 작업 큐 설정
+- [x] `2-14` `services/publishing/scheduler.ts` 발행 스케줄러
+- [x] `2-15` `services/publishing/nextjs-blog.ts` Next.js 블로그 자동 발행
+- [x] `2-16` `services/publishing/instagram.ts` Meta Graph API — 인스타그램
+- [x] `2-17` `services/publishing/threads.ts` Meta Graph API — 쓰레드
+- [x] `2-18` `services/donor/manager.ts` 이메일 수신자 관리 서비스
+- [x] `2-19` `services/donor/mailer.ts` 후원자용 이메일 콘텐츠 발송
+- [x] `2-20` `services/monitoring/competitor.ts` 경쟁업체 모니터링
+- [x] `2-21` `services/monitoring/publishing-stats.ts` 발행 통계/운영 안정성 분석
+- [x] `2-22` `services/reporting/formatter.ts` 리포트 포매팅
+- [x] `2-23` `services/reporting/daily.ts` 일간 리포트 생성
+- [x] `2-24` `services/reporting/weekly.ts` 주간 마케팅 리포트 생성
+- [x] `2-25` `api/routes/agent.ts` openclaw 연동 API 엔드포인트
 
 | 순서 | 파일 | 작업 |
 |------|------|------|
@@ -83,13 +132,13 @@ marketing-agent/
 | 2-15 | `services/publishing/nextjs-blog.ts` | Next.js 블로그 자동 발행 |
 | 2-16 | `services/publishing/instagram.ts` | Meta Graph API — 인스타그램 |
 | 2-17 | `services/publishing/threads.ts` | Meta Graph API — 쓰레드 |
-| 2-18 | `services/donor/manager.ts` | 후원자 관리 서비스 |
-| 2-19 | `services/donor/mailer.ts` | 위클리 리포트 이메일 발송 |
+| 2-18 | `services/donor/manager.ts` | 이메일 수신자 관리 서비스 |
+| 2-19 | `services/donor/mailer.ts` | 후원자용 이메일 콘텐츠 발송 |
 | 2-20 | `services/monitoring/competitor.ts` | 경쟁업체 모니터링 |
-| 2-21 | `services/monitoring/analyzer.ts` | 성과 분석 |
+| 2-21 | `services/monitoring/publishing-stats.ts` | 발행 통계/운영 안정성 분석 |
 | 2-22 | `services/reporting/formatter.ts` | 리포트 포매팅 |
 | 2-23 | `services/reporting/daily.ts` | 일간 리포트 생성 |
-| 2-24 | `services/reporting/weekly.ts` | 주간 리포트 생성 (후원자용 포함) |
+| 2-24 | `services/reporting/weekly.ts` | 주간 마케팅 리포트 생성 |
 | 2-25 | `api/routes/agent.ts` | openclaw 연동 API 엔드포인트 |
 
 ---
@@ -124,7 +173,7 @@ marketing-agent/
 | 4-3 | `skills/marketing-strategy.ts` | 위클리 마케팅 전략 수립 |
 | 4-4 | `skills/analyze-performance.ts` | 성과 분석 |
 | 4-5 | `skills/competitor-report.ts` | 경쟁업체 분석 |
-| 4-6 | `skills/donor-report.ts` | 후원자 리포트 발송 트리거 |
+| 4-6 | `skills/donor-report.ts` | 후원자 이메일 발송 트리거 |
 
 ---
 
@@ -173,5 +222,5 @@ Phase 5  ████  인프라/배포 (Docker, VPS)
 | SNS 발행 | Meta Graph API (인스타그램, 쓰레드) |
 | AI Agent | openclaw |
 | 커뮤니케이션 | Telegram (openclaw 채널) |
-| 이메일 | SMTP (후원자 리포트) |
+| 이메일 | SMTP (후원자 이메일 콘텐츠 발송) |
 | 배포 | Docker + VPS |

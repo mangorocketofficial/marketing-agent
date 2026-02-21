@@ -8,7 +8,7 @@ export type AgentTaskType =
   | 'schedule-posts'           // 포스팅 스케줄 계획
   | 'analyze-performance'      // 성과 분석
   | 'competitor-report'        // 경쟁업체 분석
-  | 'donor-report';            // 후원자 리포트 생성 트리거
+  | 'donor-report';            // 후원자 이메일 콘텐츠/발송 트리거
 
 // Agent 작업 실행 상태
 export type AgentTaskStatus =

@@ -66,7 +66,7 @@ export const AGENT_TASK_LABELS: Record<AgentTaskType, string> = {
   'schedule-posts': '포스팅 스케줄링',
   'analyze-performance': '성과 분석',
   'competitor-report': '경쟁업체 분석',
-  'donor-report': '후원자 리포트 생성',
+  'donor-report': '후원자 이메일 발송',
 };
 
 // ── 리포트 관련 ──
@@ -74,11 +74,10 @@ export const AGENT_TASK_LABELS: Record<AgentTaskType, string> = {
 export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   'marketing-daily': '일간 마케팅 리포트',
   'marketing-weekly': '주간 마케팅 리포트',
-  'donor-weekly': '주간 후원자 리포트',
 };
 
 // ── 수치 상수 ──
 
 export const MAX_RETRY_COUNT = 3;                     // 발행 실패 시 최대 재시도 횟수
 export const DEFAULT_POSTS_PER_DAY = 1;               // 기본 하루 포스팅 수
-export const DONOR_REPORT_DAY = 1;                    // 후원자 리포트 발송 요일 (1=월요일)
+export const DONOR_REPORT_DAY = 1;                    // 후원자 이메일 발송 요일 (1=월요일)
