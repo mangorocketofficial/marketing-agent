@@ -25,7 +25,8 @@
 marketing-agent/
 ├── packages/shared/       ← 공유 타입, 상수, 유틸리티
 ├── apps/server/           ← Express 백엔드 (API, DB, 발행, 분석)
-├── apps/blog/             ← Next.js 블로그 (자동 발행 + 네이버 검수 보드)
+├── apps/admin/            ← Next.js 관리자 대시보드 (AI agent/통계/발행 관리)
+├── apps/site/             ← Next.js 공개 사이트/블로그
 └── openclaw/              ← AI agent 설정 및 스킬
 ```
 
@@ -143,20 +144,23 @@ marketing-agent/
 
 ---
 
-## Phase 3: 프론트엔드 — apps/blog (Next.js)
+## Phase 3: 프론트엔드 — apps/admin + apps/site (Next.js)
 
-> 목표: 자동 발행되는 블로그 사이트와 네이버 콘텐츠 검수 보드를 구현한다.
+> 목표: 관리자 대시보드와 공개 사이트를 분리해 구현한다.
 
 서버 API가 있어야 블로그가 데이터를 가져올 수 있으므로 Phase 2 이후에 진행한다.
 
 | 순서 | 파일 | 작업 |
 |------|------|------|
-| 3-1 | `package.json`, `tsconfig.json`, `next.config.js` | Next.js 프로젝트 설정 |
-| 3-2 | `src/lib/api.ts` | Server API 클라이언트 유틸 |
-| 3-3 | `src/app/layout.tsx` | 루트 레이아웃 |
-| 3-4 | `src/app/page.tsx` | 블로그 메인 (포스트 목록) |
-| 3-5 | `src/app/posts/[slug]/page.tsx` | 개별 포스트 상세 페이지 |
-| 3-6 | `src/app/admin/review/page.tsx` | 네이버 블로그용 HTML 검수 보드 |
+| 3-1 | `apps/admin/package.json`, `tsconfig.json`, `next.config.js` | 관리자 Next.js 설정 |
+| 3-2 | `apps/admin/src/lib/api.ts` | Server API 클라이언트 유틸 |
+| 3-3 | `apps/admin/src/app/layout.tsx` | 관리자 루트 레이아웃 |
+| 3-4 | `apps/admin/src/app/page.tsx` | 관리자 대시보드 홈 |
+| 3-5 | `apps/admin/src/app/reports/page.tsx` | 리포트/통계 조회 화면 |
+| 3-6 | `apps/admin/src/app/publishing/page.tsx` | 발행 관리/검수 보드 |
+| 3-7 | `apps/site/package.json`, `tsconfig.json`, `next.config.js` | 공개 사이트 Next.js 설정 |
+| 3-8 | `apps/site/src/app/page.tsx` | 공개 메인/포스트 목록 |
+| 3-9 | `apps/site/src/app/posts/[slug]/page.tsx` | 공개 포스트 상세 |
 
 ---
 
@@ -185,8 +189,8 @@ marketing-agent/
 |------|------|------|
 | 5-1 | WSL 개발환경 구성 | Node.js 22+, Docker, Git 설정 |
 | 5-2 | Docker Compose | server + PostgreSQL + Redis 컨테이너 구성 |
-| 5-3 | Dockerfile 작성 | server, blog 각각 |
-| 5-4 | VPS 배포 | 서버 + 블로그 + openclaw 배포 |
+| 5-3 | Dockerfile 작성 | server, admin, site 각각 |
+| 5-4 | VPS 배포 | 서버 + admin + site + openclaw 배포 |
 | 5-5 | openclaw 상시 가동 | Telegram 채널 연결 + 24시간 운영 |
 
 ---
@@ -200,7 +204,7 @@ Phase 1  ███  shared 타입/상수 완성 (Windows에서 진행)
               ↓
 Phase 2  ████████████  server (DB → API → 서비스)
               ↓
-Phase 3  ██████  blog (Next.js)     ← 동시 진행 가능
+Phase 3  ██████  admin + site (Next.js)  ← 동시 진행 가능
 Phase 4  ██████  openclaw (스킬)    ← 동시 진행 가능
               ↓
 Phase 5  ████  인프라/배포 (Docker, VPS)
