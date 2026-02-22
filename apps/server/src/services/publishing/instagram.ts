@@ -26,6 +26,10 @@ interface GraphPublishMediaResponse {
   id?: string;
 }
 
+interface InstagramMeResponse {
+  id?: string;
+}
+
 export interface InstagramPublishResult {
   postId: string;
   creationId: string;
@@ -35,6 +39,7 @@ export interface InstagramPublishResult {
 }
 
 const DEFAULT_META_GRAPH_VERSION = 'v21.0';
+const DEFAULT_INSTAGRAM_GRAPH_BASE_URL = 'https://graph.instagram.com';
 const INSTAGRAM_CAPTION_LIMIT = 2200;
 
 function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
@@ -68,10 +73,14 @@ function getMetaGraphVersion(): string {
   return process.env.META_GRAPH_API_VERSION ?? DEFAULT_META_GRAPH_VERSION;
 }
 
+function getInstagramGraphBaseUrl(): string {
+  return process.env.INSTAGRAM_GRAPH_BASE_URL ?? DEFAULT_INSTAGRAM_GRAPH_BASE_URL;
+}
+
 function getMetaAccessToken(): string {
-  const token = process.env.META_ACCESS_TOKEN;
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN ?? process.env.META_ACCESS_TOKEN;
   if (!token) {
-    throw new Error('META_ACCESS_TOKEN is not configured');
+    throw new Error('INSTAGRAM_ACCESS_TOKEN or META_ACCESS_TOKEN is not configured');
   }
   return token;
 }
@@ -92,11 +101,21 @@ function buildCaption(post: PostRow): string {
   return truncateCaption(parts.join('\n\n'));
 }
 
-function resolveInstagramAccountId(customerInstagramAccount: string | null): string {
+function normalizeNumericId(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim();
+  return /^\d+$/.test(normalized) ? normalized : null;
+}
+
+function resolveInstagramAccountId(customerInstagramAccount: string | null): string | null {
   const configured = process.env.META_INSTAGRAM_ACCOUNT_ID;
-  if (configured) return configured;
-  if (customerInstagramAccount) return customerInstagramAccount;
-  throw new Error('Instagram account id is not configured (META_INSTAGRAM_ACCOUNT_ID/customer.instagram_account)');
+  const configuredId = normalizeNumericId(configured);
+  if (configuredId) return configuredId;
+
+  const customerId = normalizeNumericId(customerInstagramAccount);
+  if (customerId) return customerId;
+
+  return null;
 }
 
 function buildInstagramMediaUrl(mediaId: string): string {
@@ -129,6 +148,29 @@ async function getCustomerInstagramAccount(
   );
   if (!rows.length) return null;
   return rows[0].instagram_account ?? null;
+}
+
+async function resolveInstagramAccountIdWithFallback(
+  customerInstagramAccount: string | null,
+): Promise<string> {
+  const resolved = resolveInstagramAccountId(customerInstagramAccount);
+  if (resolved) {
+    return resolved;
+  }
+
+  const token = getMetaAccessToken();
+  const endpoint = `${getInstagramGraphBaseUrl()}/me?fields=id&access_token=${encodeURIComponent(token)}`;
+  const response = await fetch(endpoint);
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`instagram me lookup failed (${response.status}): ${raw}`);
+  }
+
+  const data = JSON.parse(raw) as InstagramMeResponse;
+  if (!data.id) {
+    throw new Error('instagram me lookup response missing id');
+  }
+  return data.id;
 }
 
 async function markPostPublished(
@@ -175,7 +217,7 @@ async function createInstagramMediaContainer(
 ): Promise<string> {
   const version = getMetaGraphVersion();
   const token = getMetaAccessToken();
-  const endpoint = `https://graph.facebook.com/${version}/${instagramAccountId}/media`;
+  const endpoint = `${getInstagramGraphBaseUrl()}/${version}/${instagramAccountId}/media`;
 
   const body = new URLSearchParams();
   body.set('image_url', imageUrl);
@@ -205,7 +247,7 @@ async function publishInstagramContainer(
 ): Promise<string> {
   const version = getMetaGraphVersion();
   const token = getMetaAccessToken();
-  const endpoint = `https://graph.facebook.com/${version}/${instagramAccountId}/media_publish`;
+  const endpoint = `${getInstagramGraphBaseUrl()}/${version}/${instagramAccountId}/media_publish`;
 
   const body = new URLSearchParams();
   body.set('creation_id', creationId);
@@ -247,7 +289,7 @@ export async function publishToInstagram(
   }
 
   const customerInstagramAccount = await getCustomerInstagramAccount(db, post.customer_id);
-  const instagramAccountId = resolveInstagramAccountId(customerInstagramAccount);
+  const instagramAccountId = await resolveInstagramAccountIdWithFallback(customerInstagramAccount);
   const caption = buildCaption(post);
 
   try {

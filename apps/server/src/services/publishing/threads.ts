@@ -25,6 +25,10 @@ interface GraphPublishThreadsMediaResponse {
   id?: string;
 }
 
+interface ThreadsMeResponse {
+  id?: string;
+}
+
 export interface ThreadsPublishResult {
   postId: string;
   creationId: string;
@@ -33,7 +37,7 @@ export interface ThreadsPublishResult {
   publishedAt: string;
 }
 
-const DEFAULT_META_GRAPH_VERSION = 'v21.0';
+const DEFAULT_THREADS_API_BASE_URL = 'https://graph.threads.net/v1.0';
 const THREADS_TEXT_LIMIT = 500;
 
 function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
@@ -80,22 +84,32 @@ function toErrorMessage(error: unknown): string {
 }
 
 function getMetaAccessToken(): string {
-  const token = process.env.META_ACCESS_TOKEN;
+  const token = process.env.THREADS_ACCESS_TOKEN ?? process.env.META_ACCESS_TOKEN;
   if (!token) {
-    throw new Error('META_ACCESS_TOKEN is not configured');
+    throw new Error('THREADS_ACCESS_TOKEN or META_ACCESS_TOKEN is not configured');
   }
   return token;
 }
 
-function getMetaGraphVersion(): string {
-  return process.env.META_GRAPH_API_VERSION ?? DEFAULT_META_GRAPH_VERSION;
+function getThreadsApiBaseUrl(): string {
+  return process.env.THREADS_API_BASE_URL ?? DEFAULT_THREADS_API_BASE_URL;
 }
 
-function resolveThreadsAccountId(customerThreadsAccount: string | null): string {
+function normalizeNumericId(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim();
+  return /^\d+$/.test(normalized) ? normalized : null;
+}
+
+function resolveThreadsAccountId(customerThreadsAccount: string | null): string | null {
   const configured = process.env.META_THREADS_ACCOUNT_ID;
-  if (configured) return configured;
-  if (customerThreadsAccount) return customerThreadsAccount;
-  throw new Error('Threads account id is not configured (META_THREADS_ACCOUNT_ID/customer.threads_account)');
+  const configuredId = normalizeNumericId(configured);
+  if (configuredId) return configuredId;
+
+  const customerId = normalizeNumericId(customerThreadsAccount);
+  if (customerId) return customerId;
+
+  return null;
 }
 
 function buildThreadsUrl(mediaId: string): string {
@@ -128,6 +142,29 @@ async function getCustomerThreadsAccount(
   );
   if (!rows.length) return null;
   return rows[0].threads_account ?? null;
+}
+
+async function resolveThreadsAccountIdWithFallback(
+  customerThreadsAccount: string | null,
+): Promise<string> {
+  const resolved = resolveThreadsAccountId(customerThreadsAccount);
+  if (resolved) {
+    return resolved;
+  }
+
+  const token = getMetaAccessToken();
+  const endpoint = `${getThreadsApiBaseUrl()}/me?fields=id&access_token=${encodeURIComponent(token)}`;
+  const response = await fetch(endpoint);
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`threads me lookup failed (${response.status}): ${raw}`);
+  }
+
+  const data = JSON.parse(raw) as ThreadsMeResponse;
+  if (!data.id) {
+    throw new Error('threads me lookup response missing id');
+  }
+  return data.id;
 }
 
 async function markPostPublished(
@@ -171,9 +208,8 @@ async function createThreadsMediaContainer(
   threadsAccountId: string,
   text: string,
 ): Promise<string> {
-  const version = getMetaGraphVersion();
   const token = getMetaAccessToken();
-  const endpoint = `https://graph.facebook.com/${version}/${threadsAccountId}/threads`;
+  const endpoint = `${getThreadsApiBaseUrl()}/${threadsAccountId}/threads`;
 
   const body = new URLSearchParams();
   body.set('media_type', 'TEXT');
@@ -198,9 +234,8 @@ async function createThreadsMediaContainer(
 }
 
 async function publishThreadsContainer(threadsAccountId: string, creationId: string): Promise<string> {
-  const version = getMetaGraphVersion();
   const token = getMetaAccessToken();
-  const endpoint = `https://graph.facebook.com/${version}/${threadsAccountId}/threads_publish`;
+  const endpoint = `${getThreadsApiBaseUrl()}/${threadsAccountId}/threads_publish`;
 
   const body = new URLSearchParams();
   body.set('creation_id', creationId);
@@ -236,7 +271,7 @@ export async function publishToThreads(
   }
 
   const customerThreadsAccount = await getCustomerThreadsAccount(db, post.customer_id);
-  const threadsAccountId = resolveThreadsAccountId(customerThreadsAccount);
+  const threadsAccountId = await resolveThreadsAccountIdWithFallback(customerThreadsAccount);
   const text = buildThreadsText(post);
 
   try {
