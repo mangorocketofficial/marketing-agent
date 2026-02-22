@@ -1,1 +1,6 @@
-// Next.js 설정 — 코드는 추후 작성
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+};
+
+module.exports = nextConfig;

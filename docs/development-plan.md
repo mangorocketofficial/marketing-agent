@@ -150,6 +150,15 @@ marketing-agent/
 
 서버 API가 있어야 블로그가 데이터를 가져올 수 있으므로 Phase 2 이후에 진행한다.
 
+### Phase 3-A (Admin) 진행 체크리스트
+
+- [x] `3-1` `apps/admin/package.json`, `tsconfig.json`, `next.config.js` 관리자 Next.js 설정
+- [x] `3-2` `apps/admin/src/lib/api.ts` Server API 클라이언트 유틸
+- [x] `3-3` `apps/admin/src/app/layout.tsx` 관리자 루트 레이아웃
+- [x] `3-4` `apps/admin/src/app/page.tsx` 관리자 대시보드 홈
+- [x] `3-5` `apps/admin/src/app/reports/page.tsx` 리포트/통계 조회 화면
+- [x] `3-6` `apps/admin/src/app/publishing/page.tsx` 발행 관리/검수 보드
+
 | 순서 | 파일 | 작업 |
 |------|------|------|
 | 3-1 | `apps/admin/package.json`, `tsconfig.json`, `next.config.js` | 관리자 Next.js 설정 |
@@ -170,6 +179,34 @@ marketing-agent/
 
 서버 API가 준비된 후, 각 스킬에서 서버 API를 호출하는 구조.
 
+### Phase 4 연결 원칙
+
+- OpenClaw는 서버 API를 단일 백엔드로 사용한다. (`/api/agent`, `/api/posts`, `/api/reports` 등)
+- 스킬은 공통 패턴으로 구현한다. (입력 검증 → 서버 API 호출 → task 상태 업데이트)
+- 인증은 `API_AUTH_TOKEN` 기준으로 통일한다.
+- 활동 콘텐츠 자동화는 파일시스템 직접 전체 탐색이 아니라 `ingest 결과 조회(RAG)` 방식으로 연결한다.
+
+### Phase 4 진행 체크리스트
+
+- [x] `4-1` `openclaw/config.yml` 런타임/채널/모델/환경변수 설정
+- [x] `4-2` `openclaw/skills/schedule-posts.ts` 서버 API 연동 및 예약 생성
+- [x] `4-3` `openclaw/skills/marketing-strategy.ts` 전략 생성 + task 기록
+- [x] `4-4` `openclaw/skills/analyze-performance.ts` 리포트 요약 + 인사이트 반환
+- [x] `4-5` `openclaw/skills/competitor-report.ts` 경쟁사 분석 결과 생성
+- [x] `4-6` `openclaw/skills/donor-report.ts` 후원자 이메일 콘텐츠 트리거
+- [ ] `4-7` Activity automation 1차 연결 (`promotion/live/retrospective` 타입)
+- [ ] `4-8` 승인 정책 연결 (자동/승인 후 발행 분기)
+- [ ] `4-9` 운영 안정화 (재시도, timeout, idempotency, 로깅)
+
+### Phase 4 구현 순서 (권장)
+
+1. `config.yml` 고정
+2. `schedule-posts` 스킬부터 연결
+3. `marketing-strategy`, `analyze-performance` 연결
+4. `competitor-report`, `donor-report` 연결
+5. Activity automation 연결
+6. 운영 안정화 및 관측성 보강
+
 | 순서 | 파일 | 작업 |
 |------|------|------|
 | 4-1 | `config.yml` | Telegram 채널 연결, LLM 모델 설정 |
@@ -184,6 +221,12 @@ marketing-agent/
 ## Phase 5: 인프라 & 배포
 
 > 목표: Docker 기반 배포 환경을 구성하고 VPS에서 24시간 가동한다.
+
+### 운영 전략 결정
+
+- 기본 제공 형태는 `VPS 관리형`으로 운영한다.
+- 이유: 고객 단말 환경 의존도를 줄이고, 장애 대응/업데이트/모니터링 효율을 높이기 위함.
+- 로컬 설치형은 추후 옵션 상품으로 분리 검토한다.
 
 | 순서 | 작업 | 설명 |
 |------|------|------|

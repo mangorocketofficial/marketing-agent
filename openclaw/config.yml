@@ -1,1 +1,90 @@
-# openclaw 설정 — 코드는 추후 작성
+# Project-level OpenClaw integration template
+# NOTE:
+# - OpenClaw runtime canonical config path is ~/.openclaw/openclaw.json
+# - This file is our project-managed template for channels/models/server integration.
+
+project:
+  name: marketing-agent
+  environment: development
+  timezone: Asia/Seoul
+
+openclaw:
+  profile: marketing-agent
+  gateway:
+    # local | remote
+    mode: local
+    wsUrl: ws://127.0.0.1:18789
+    token: ${OPENCLAW_GATEWAY_TOKEN}
+    password: ${OPENCLAW_GATEWAY_PASSWORD}
+  agent:
+    id: marketing-main
+    workspace: ./openclaw
+    sessionScope: per-sender
+  channels:
+    telegram:
+      enabled: true
+      botToken: ${TELEGRAM_BOT_TOKEN}
+      allowedChatIds: []
+      mentionRequiredInGroups: true
+
+models:
+  provider: openai
+  default: ${OPENAI_MODEL}
+  fallbacks:
+    - gpt-4.1-mini
+  temperature: 0.3
+  maxOutputTokens: 1800
+
+serverApi:
+  baseUrl: http://127.0.0.1:3000
+  auth:
+    type: bearer
+    token: ${API_AUTH_TOKEN}
+  timeoutMs: 15000
+  retry:
+    attempts: 3
+    backoffMs: 1000
+
+skills:
+  schedule-posts:
+    enabled: true
+    createAgentTask: true
+  marketing-strategy:
+    enabled: true
+    createAgentTask: true
+  analyze-performance:
+    enabled: true
+    createAgentTask: true
+  competitor-report:
+    enabled: true
+    createAgentTask: true
+  donor-report:
+    enabled: true
+    createAgentTask: true
+
+activityAutomation:
+  enabled: true
+  sourceRoot: ./projects
+  ingest:
+    queueName: ingest-files
+    supportedExtensions:
+      - .md
+      - .txt
+      - .pdf
+      - .docx
+      - .jpg
+      - .jpeg
+      - .png
+  contentTypes:
+    - promotion
+    - live
+    - retrospective
+  publishPolicy:
+    promotion: approval_required
+    live: auto_if_low_risk
+    retrospective: approval_required
+
+observability:
+  logLevel: info
+  emitTaskEvents: true
+  writeSkillLogs: true
