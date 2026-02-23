@@ -30,6 +30,11 @@ function getParamPlaceholder(index: number): string {
   return `$${index}`;
 }
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 async function fetchDuePosts(
   db: DatabaseClient,
   nowIso: string,
@@ -50,9 +55,24 @@ async function markPostPublishing(db: DatabaseClient, postId: string, nowIso: st
   const idPlaceholder = getParamPlaceholder(1);
   const updatedAtPlaceholder = getParamPlaceholder(2);
   const sql = `UPDATE posts
-               SET status = 'publishing', updated_at = ${updatedAtPlaceholder}
+               SET status = 'publishing', error_message = NULL, updated_at = ${updatedAtPlaceholder}
                WHERE id = ${idPlaceholder}`;
   await db.execute(sql, [postId, nowIso]);
+}
+
+async function markPostApprovedWithError(
+  db: DatabaseClient,
+  postId: string,
+  errorMessage: string,
+): Promise<void> {
+  const idPlaceholder = getParamPlaceholder(1);
+  const now = new Date().toISOString();
+  await db.execute(
+    `UPDATE posts
+     SET status = 'approved', error_message = $2, updated_at = $3
+     WHERE id = ${idPlaceholder}`,
+    [postId, errorMessage, now],
+  );
 }
 
 export async function scheduleDuePosts(
@@ -63,24 +83,33 @@ export async function scheduleDuePosts(
   const nowIso = new Date().toISOString();
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
   const duePosts = await fetchDuePosts(db, nowIso, batchSize);
+  let enqueuedCount = 0;
 
   for (const post of duePosts) {
-    await markPostPublishing(db, post.id, nowIso);
-    await enqueuePublishPost(
-      queue,
-      {
-        postId: post.id,
-        customerId: post.customer_id,
-        channel: post.channel as PostChannel,
-        scheduledAt: post.scheduled_at,
-      },
-      {
-        jobId: `publish-post:${post.id}`,
-      },
-    );
+    try {
+      await markPostPublishing(db, post.id, nowIso);
+      await enqueuePublishPost(
+        queue,
+        {
+          postId: post.id,
+          customerId: post.customer_id,
+          channel: post.channel as PostChannel,
+          scheduledAt: post.scheduled_at,
+        },
+        {
+          jobId: `publish-post:${post.id}`,
+        },
+      );
+      enqueuedCount += 1;
+    } catch (error: unknown) {
+      const message = toErrorMessage(error);
+      await markPostApprovedWithError(db, post.id, `Queue enqueue failed: ${message}`);
+      // eslint-disable-next-line no-console
+      console.error(`[scheduler] failed to enqueue post=${post.id}: ${message}`);
+    }
   }
 
-  return duePosts.length;
+  return enqueuedCount;
 }
 
 export function startPublishingScheduler(

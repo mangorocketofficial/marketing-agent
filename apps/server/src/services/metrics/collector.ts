@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { DatabaseClient } from '../../db';
 import { getParamPlaceholder } from '../../utils/db';
 import { updateVectorPerformanceForPost } from '../content/rag';
@@ -91,12 +90,40 @@ async function insertMetric(
   metric: MetricRow,
 ): Promise<void> {
   const now = new Date().toISOString();
+
+  const updated = await db.query<{ id: string }>(
+    `UPDATE post_metrics
+     SET channel = $2,
+         impressions = $3,
+         likes = $4,
+         comments = $5,
+         shares = $6,
+         saves = $7,
+         clicks = $8,
+         collected_at = $9
+     WHERE post_id = $1
+     RETURNING id`,
+    [
+      postId,
+      channel,
+      metric.impressions,
+      metric.likes,
+      metric.comments,
+      metric.shares,
+      metric.saves,
+      metric.clicks,
+      now,
+    ],
+  );
+  if (updated.length > 0) {
+    return;
+  }
+
   await db.execute(
     `INSERT INTO post_metrics (
-      id, post_id, channel, impressions, likes, comments, shares, saves, clicks, collected_at
-    ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      post_id, channel, impressions, likes, comments, shares, saves, clicks, collected_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
-      randomUUID(),
       postId,
       channel,
       metric.impressions,
@@ -158,7 +185,7 @@ export async function getMetricsSummary(
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const params: unknown[] = [since];
-  const whereParts = ['pm.collected_at >= ' + getParamPlaceholder(params.length)];
+  const whereParts = ['lm.collected_at >= ' + getParamPlaceholder(params.length)];
   if (filters.customerId) {
     params.push(filters.customerId);
     whereParts.push(`p.customer_id = ${getParamPlaceholder(params.length)}`);
@@ -175,16 +202,30 @@ export async function getMetricsSummary(
     saves: number;
     clicks: number;
   }>(
-    `SELECT
-      COUNT(DISTINCT pm.post_id) AS post_count,
-      COALESCE(SUM(pm.impressions), 0) AS impressions,
-      COALESCE(SUM(pm.likes), 0) AS likes,
-      COALESCE(SUM(pm.comments), 0) AS comments,
-      COALESCE(SUM(pm.shares), 0) AS shares,
-      COALESCE(SUM(pm.saves), 0) AS saves,
-      COALESCE(SUM(pm.clicks), 0) AS clicks
-     FROM post_metrics pm
-     JOIN posts p ON p.id = pm.post_id
+    `WITH latest_metrics AS (
+       SELECT DISTINCT ON (post_id)
+         post_id,
+         channel,
+         impressions,
+         likes,
+         comments,
+         shares,
+         saves,
+         clicks,
+         collected_at
+       FROM post_metrics
+       ORDER BY post_id, collected_at DESC
+     )
+     SELECT
+      COUNT(DISTINCT lm.post_id) AS post_count,
+      COALESCE(SUM(lm.impressions), 0) AS impressions,
+      COALESCE(SUM(lm.likes), 0) AS likes,
+      COALESCE(SUM(lm.comments), 0) AS comments,
+      COALESCE(SUM(lm.shares), 0) AS shares,
+      COALESCE(SUM(lm.saves), 0) AS saves,
+      COALESCE(SUM(lm.clicks), 0) AS clicks
+     FROM latest_metrics lm
+     JOIN posts p ON p.id = lm.post_id
      ${whereSql}`,
     params,
   );
@@ -199,19 +240,33 @@ export async function getMetricsSummary(
     saves: number;
     clicks: number;
   }>(
-    `SELECT
-      pm.channel AS channel,
-      COUNT(DISTINCT pm.post_id) AS post_count,
-      COALESCE(SUM(pm.impressions), 0) AS impressions,
-      COALESCE(SUM(pm.likes), 0) AS likes,
-      COALESCE(SUM(pm.comments), 0) AS comments,
-      COALESCE(SUM(pm.shares), 0) AS shares,
-      COALESCE(SUM(pm.saves), 0) AS saves,
-      COALESCE(SUM(pm.clicks), 0) AS clicks
-     FROM post_metrics pm
-     JOIN posts p ON p.id = pm.post_id
+    `WITH latest_metrics AS (
+       SELECT DISTINCT ON (post_id)
+         post_id,
+         channel,
+         impressions,
+         likes,
+         comments,
+         shares,
+         saves,
+         clicks,
+         collected_at
+       FROM post_metrics
+       ORDER BY post_id, collected_at DESC
+     )
+     SELECT
+      lm.channel AS channel,
+      COUNT(DISTINCT lm.post_id) AS post_count,
+      COALESCE(SUM(lm.impressions), 0) AS impressions,
+      COALESCE(SUM(lm.likes), 0) AS likes,
+      COALESCE(SUM(lm.comments), 0) AS comments,
+      COALESCE(SUM(lm.shares), 0) AS shares,
+      COALESCE(SUM(lm.saves), 0) AS saves,
+      COALESCE(SUM(lm.clicks), 0) AS clicks
+     FROM latest_metrics lm
+     JOIN posts p ON p.id = lm.post_id
      ${whereSql}
-     GROUP BY pm.channel
+     GROUP BY lm.channel
      ORDER BY impressions DESC`,
     params,
   );

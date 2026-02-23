@@ -2,7 +2,7 @@
 
 > **Project**: marketing-agent
 > **Date**: 2026-02-22
-> **Status**: Proposal
+> **Status**: R1–R5 Complete (2026-02-23)
 > **Scope**: OpenClaw agent role, Content Generation API, RAG pipeline, server service layer
 
 ---
@@ -542,44 +542,43 @@ Week 24: Comprehensive per-NGO marketing playbook accumulated in memory
 - Vector metadata updated with performance scores
 - OpenClaw heartbeat reads and analyzes metrics
 
-### Phase R5: Cleanup and Deprecation
+### Phase R5: Cleanup and Deprecation ✅ Complete
 
 **Goal**: Remove legacy dual-path code. Single content path through Content API.
 
-**Files to remove:**
+**Completed actions (2026-02-23):**
 
-- `generate-content` job type from `queue.ts`
-- `enqueueGenerateContent()` from `queue.ts`
+- `generate-content` job type was already absent from `queue.ts` (only `publish-post` and `retry-publish` remain)
+- `templates.ts` deleted — `generator.ts` now reads `openclaw/prompts/channel-guidelines.md` directly via `loadChannelGuidelinesMarkdown()`
+- `generator.ts` refactored: `GenerateContentInput` no longer extends `TemplateContext`; customer context built inline
+- `packages/shared/src/types/agent.ts` already uses `request-content-generation` (no `generate-content` naming)
+- `.env.example` already correct (PostgreSQL-only, no SQLite reference)
+- SQLite remnant `data/dev.db` removed
 
-**Files to modify:**
+**Acceptance criteria — all met:**
 
-- `apps/server/src/services/publishing/queue.ts` — Remove `generate-content` job type, keep only `publish-post` and `retry-publish`
-- `apps/server/src/services/content/templates.ts` — Keep as reference or remove (content migrated to `openclaw/prompts/channel-guidelines.md`)
-- `.env.example` — `OPENAI_API_KEY` needed only for Content API (embedding + generation), not for OpenClaw gateway calls
-- `packages/shared/src/types/agent.ts` — Ensure agent action naming is `request-content-generation` (not queue job terminology)
-
-**Acceptance criteria:**
-
-- Server has no autonomous content generation path
-- All content generation is triggered by OpenClaw
-- BullMQ only handles publishing jobs
-- No orphaned code or environment variables
-- No ambiguous `generate-content` naming across action type vs queue job
+- ✅ Server has no autonomous content generation path
+- ✅ All content generation is triggered by OpenClaw via `POST /api/content/generate`
+- ✅ BullMQ only handles `publish-post` and `retry-publish` jobs
+- ✅ No orphaned code (`templates.ts` deleted, no `generate-content` job type)
+- ✅ No ambiguous naming — agent action is `request-content-generation`, queue jobs are `publish-post`/`retry-publish`
 
 ---
 
 ## 6. Migration Order and Safety
 
 ```
-R1 (Content API + RAG)          ← Additive. No breaking changes.
-  ↓                                generator.ts still works as fallback
-R2 (Channel guidelines → OC)    ← Additive. Prompt files only.
+R1 (Content API + RAG)          ✅ Complete — rag.ts, ingest.ts, content route
   ↓
-R3 (OpenClaw autonomous loop)   ← New capability. Old path still works.
+R2 (Channel guidelines → OC)    ✅ Complete — channel-guidelines.md, templates.ts removed
   ↓
-R4 (Performance feedback loop)  ← Additive. Metrics collection.
+R3 (OpenClaw autonomous loop)   ✅ Complete — autonomous-weekly-loop.ts skill
   ↓
-R5 (Cleanup)                    ← Remove old path. Only after R1-R4 stable.
+R4 (Performance feedback loop)  ✅ Complete — collector.ts, metrics route
+  ↓
+R5 (Cleanup)                    ✅ Complete — templates.ts deleted, generate-content job
+  ↓                                already absent, generator.ts reads guidelines.md directly,
+                                   SQLite remnant (data/dev.db) removed
 ```
 
 ### Rollback Triggers
@@ -621,12 +620,13 @@ R5 (Cleanup)                    ← Remove old path. Only after R1-R4 stable.
 | `packages/shared/src/types/agent.ts` | Add `request-content-generation` to AgentTaskType |
 | `.env.example` | Document new architecture's env needs |
 
-### Files Deprecated (Phase R5)
+### Files Removed (Phase R5 — 2026-02-23)
 
-| File | Timeline |
-|------|----------|
-| `apps/server/src/services/content/templates.ts` | Content migrated in R2, removed or kept as reference in R5 |
-| `generate-content` BullMQ job | Removed in R5 |
+| File | Action |
+|------|--------|
+| `apps/server/src/services/content/templates.ts` | Deleted. Logic inlined into `generator.ts`; data sourced from `channel-guidelines.md` |
+| `generate-content` BullMQ job | Was already absent. `queue.ts` only has `publish-post` / `retry-publish` |
+| `data/dev.db` | SQLite remnant deleted (Postgres-only architecture) |
 
 ---
 

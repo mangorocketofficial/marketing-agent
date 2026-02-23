@@ -5,6 +5,8 @@ export const migration007PostMetrics: MigrationStep = {
   description: 'Post performance metrics',
   sql: {
     postgres: `
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE IF NOT EXISTS post_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
