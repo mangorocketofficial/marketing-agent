@@ -40,8 +40,8 @@ export interface ThreadsPublishResult {
 const DEFAULT_THREADS_API_BASE_URL = 'https://graph.threads.net/v1.0';
 const THREADS_TEXT_LIMIT = 500;
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+function getParamPlaceholder(index: number): string {
+  return `$${index}`;
 }
 
 function parseTags(value: unknown): string[] {
@@ -117,7 +117,7 @@ function buildThreadsUrl(mediaId: string): string {
 }
 
 async function getPostById(db: DatabaseClient, postId: string): Promise<PostRow | null> {
-  const idPlaceholder = getParamPlaceholder(db.dialect, 1);
+  const idPlaceholder = getParamPlaceholder(1);
   const rows = await db.query<PostRow>(
     `SELECT id, customer_id, channel, title, content, tags
      FROM posts
@@ -132,7 +132,7 @@ async function getCustomerThreadsAccount(
   db: DatabaseClient,
   customerId: string,
 ): Promise<string | null> {
-  const idPlaceholder = getParamPlaceholder(db.dialect, 1);
+  const idPlaceholder = getParamPlaceholder(1);
   const rows = await db.query<CustomerRow>(
     `SELECT id, threads_account
      FROM customers
@@ -173,35 +173,24 @@ async function markPostPublished(
   publishedUrl: string,
   publishedAt: string,
 ): Promise<void> {
-  const idPlaceholder = getParamPlaceholder(db.dialect, 1);
-  const sql =
-    db.dialect === 'postgres'
-      ? `UPDATE posts
-         SET status = 'published', published_url = $2, published_at = $3, updated_at = $3, error_message = NULL
-         WHERE id = ${idPlaceholder}`
-      : `UPDATE posts
-         SET status = 'published', published_url = ?, published_at = ?, updated_at = ?, error_message = NULL
-         WHERE id = ${idPlaceholder}`;
-  const params =
-    db.dialect === 'postgres'
-      ? [postId, publishedUrl, publishedAt]
-      : [publishedUrl, publishedAt, publishedAt, postId];
-  await db.execute(sql, params);
+  const idPlaceholder = getParamPlaceholder(1);
+  await db.execute(
+    `UPDATE posts
+     SET status = 'published', published_url = $2, published_at = $3, updated_at = $3, error_message = NULL
+     WHERE id = ${idPlaceholder}`,
+    [postId, publishedUrl, publishedAt],
+  );
 }
 
 async function markPostFailed(db: DatabaseClient, postId: string, errorMessage: string): Promise<void> {
-  const idPlaceholder = getParamPlaceholder(db.dialect, 1);
+  const idPlaceholder = getParamPlaceholder(1);
   const now = new Date().toISOString();
-  const sql =
-    db.dialect === 'postgres'
-      ? `UPDATE posts
-         SET status = 'failed', error_message = $2, updated_at = $3
-         WHERE id = ${idPlaceholder}`
-      : `UPDATE posts
-         SET status = 'failed', error_message = ?, updated_at = ?
-         WHERE id = ${idPlaceholder}`;
-  const params = db.dialect === 'postgres' ? [postId, errorMessage, now] : [errorMessage, now, postId];
-  await db.execute(sql, params);
+  await db.execute(
+    `UPDATE posts
+     SET status = 'failed', error_message = $2, updated_at = $3
+     WHERE id = ${idPlaceholder}`,
+    [postId, errorMessage, now],
+  );
 }
 
 async function createThreadsMediaContainer(

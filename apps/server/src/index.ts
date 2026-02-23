@@ -2,8 +2,10 @@ import { config as loadEnv } from 'dotenv';
 import express from 'express';
 import { requireApiAuth } from './api/middleware/auth';
 import { createAgentRouter } from './api/routes/agent';
+import { createContentRouter } from './api/routes/content';
 import { createCustomersRouter } from './api/routes/customers';
 import { createDonorsRouter } from './api/routes/donors';
+import { createMetricsRouter } from './api/routes/metrics';
 import { createPostsRouter } from './api/routes/posts';
 import { createReportsRouter } from './api/routes/reports';
 import { initDatabase, type DatabaseClient } from './db';
@@ -68,10 +70,12 @@ function registerRoutes(app: express.Express, db: DatabaseClient): void {
   });
 
   app.use('/api/customers', requireApiAuth, createCustomersRouter(db));
+  app.use('/api/content', requireApiAuth, createContentRouter(db));
   app.use('/api/posts', requireApiAuth, createPostsRouter(db));
   app.use('/api/recipients', requireApiAuth, createDonorsRouter(db));
   app.use('/api/donors', requireApiAuth, createDonorsRouter(db));
   app.use('/api/reports', requireApiAuth, createReportsRouter(db));
+  app.use('/api/metrics', requireApiAuth, createMetricsRouter(db));
   app.use('/api/agent', requireApiAuth, createAgentRouter(db));
 }
 

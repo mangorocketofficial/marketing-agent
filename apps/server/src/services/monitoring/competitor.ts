@@ -28,8 +28,8 @@ interface PostRow {
   channel: string;
 }
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+function getParamPlaceholder(index: number): string {
+  return `$${index}`;
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -94,9 +94,9 @@ async function loadPostsInRange(
   periodStart: string,
   periodEnd: string,
 ): Promise<PostRow[]> {
-  const customerPlaceholder = getParamPlaceholder(db.dialect, 1);
-  const startPlaceholder = getParamPlaceholder(db.dialect, 2);
-  const endPlaceholder = getParamPlaceholder(db.dialect, 3);
+  const customerPlaceholder = getParamPlaceholder(1);
+  const startPlaceholder = getParamPlaceholder(2);
+  const endPlaceholder = getParamPlaceholder(3);
 
   return db.query<PostRow>(
     `SELECT title, tags, channel

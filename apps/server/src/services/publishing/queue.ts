@@ -22,14 +22,7 @@ const DEFAULT_JOB_OPTIONS: JobsOptions = {
   removeOnFail: 100,
 };
 
-export type PublishingJobName = 'generate-content' | 'publish-post' | 'retry-publish';
-
-export interface GenerateContentJobData {
-  customerId: string;
-  channel: 'naver-blog' | 'instagram' | 'threads' | 'nextjs-blog';
-  topic: string;
-  requestedBy?: string;
-}
+export type PublishingJobName = 'publish-post' | 'retry-publish';
 
 export interface PublishPostJobData {
   postId: string;
@@ -45,7 +38,6 @@ export interface RetryPublishJobData {
 }
 
 type PublishingJobDataMap = {
-  'generate-content': GenerateContentJobData;
   'publish-post': PublishPostJobData;
   'retry-publish': RetryPublishJobData;
 };
@@ -89,14 +81,6 @@ export async function enqueuePublishingJob<Name extends PublishingJobName>(
   options?: JobsOptions,
 ): Promise<void> {
   await queue.add(name, data, options);
-}
-
-export async function enqueueGenerateContent(
-  queue: Queue,
-  data: GenerateContentJobData,
-  options?: JobsOptions,
-): Promise<void> {
-  await enqueuePublishingJob(queue, 'generate-content', data, options);
 }
 
 export async function enqueuePublishPost(
@@ -178,4 +162,3 @@ export async function runQueueSmokeTest(redisUrl = getRedisUrl()): Promise<void>
     await Promise.all([worker.close(), queueEvents.close(), queue.close()]);
   }
 }
-

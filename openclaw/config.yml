@@ -49,6 +49,12 @@ skills:
   schedule-posts:
     enabled: true
     createAgentTask: true
+  request-content-generation:
+    enabled: true
+    createAgentTask: true
+  autonomous-weekly-loop:
+    enabled: true
+    createAgentTask: false
   marketing-strategy:
     enabled: true
     createAgentTask: true

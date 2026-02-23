@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type { DatabaseClient } from '../../db';
+import { asString } from '../../utils/db';
 import {
   createRecipient,
   getRecipientById,
@@ -20,10 +21,6 @@ interface RecipientPayload {
 }
 
 const RECIPIENT_STATUSES: RecipientStatus[] = ['active', 'paused', 'unsubscribed'];
-
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
 
 function asBoolean(value: unknown): boolean | null {
   if (typeof value === 'boolean') return value;

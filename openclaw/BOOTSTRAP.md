@@ -27,6 +27,7 @@ Update these files with what you learned:
 
 - `IDENTITY.md` — your name, creature, vibe, emoji
 - `USER.md` — their name, how to address them, timezone, notes
+- `prompts/channel-guidelines.md` — channel tone/structure/CTA defaults for strategy and content generation
 
 Then open `SOUL.md` together and talk about:
 

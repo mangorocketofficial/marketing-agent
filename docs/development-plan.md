@@ -63,7 +63,7 @@ marketing-agent/
 - [x] WSL 개발환경 전환 완료 (Node.js 22+, npm, Git, Docker)
 - [x] `2-1` `apps/server/package.json` 의존성/스크립트 설정
 - [x] `2-2` `apps/server/tsconfig.json` TypeScript 설정 (base 상속)
-- [x] DB 선택 확정 (개발: SQLite / 운영: PostgreSQL)
+- [x] DB 선택 확정 (PostgreSQL 단일)
 - [x] 로컬 PostgreSQL/Redis 실행 방식 확정 (Docker Compose 권장)
 - [x] `.env`/`.env.example` 작성 (DB, Redis, OpenAI, SMTP, Meta, Telegram)
 - [x] `2-3` DB 스키마 초안 작성 (`db/schema.ts`)
@@ -81,7 +81,7 @@ marketing-agent/
 | 2-1 | `package.json` | Express, DB 드라이버, BullMQ 등 의존성 설정 |
 | 2-2 | `tsconfig.json` | TypeScript 설정 (base 상속) |
 | 2-3 | `db/schema.ts` | DB 테이블 스키마 정의 |
-| 2-4 | `db/index.ts` | DB 연결 설정 (PostgreSQL/SQLite) |
+| 2-4 | `db/index.ts` | DB 연결 설정 (PostgreSQL) |
 | 2-5 | `index.ts` | Express 서버 부팅, 라우트 등록 |
 | 2-6 | `api/middleware/auth.ts` | API 인증 미들웨어 |
 
@@ -262,7 +262,7 @@ Phase 5  ████  인프라/배포 (Docker, VPS)
 | 모노레포 | npm workspaces |
 | 언어 | TypeScript (전체 통일) |
 | 서버 | Express |
-| DB | PostgreSQL (프로덕션) / SQLite (개발) |
+| DB | PostgreSQL |
 | 작업 큐 | BullMQ + Redis |
 | LLM | OpenAI API |
 | 블로그 | Next.js (App Router) |

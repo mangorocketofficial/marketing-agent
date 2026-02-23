@@ -28,8 +28,8 @@ export interface PublishingStatsResult {
 
 const ALL_CHANNELS: PostChannel[] = ['naver-blog', 'instagram', 'threads', 'nextjs-blog'];
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+function getParamPlaceholder(index: number): string {
+  return `$${index}`;
 }
 
 function normalizeChannel(value: string): PostChannel | null {
@@ -50,9 +50,9 @@ async function loadPostStats(
   periodStart: string,
   periodEnd: string,
 ): Promise<PostStatsRow[]> {
-  const customerPlaceholder = getParamPlaceholder(db.dialect, 1);
-  const startPlaceholder = getParamPlaceholder(db.dialect, 2);
-  const endPlaceholder = getParamPlaceholder(db.dialect, 3);
+  const customerPlaceholder = getParamPlaceholder(1);
+  const startPlaceholder = getParamPlaceholder(2);
+  const endPlaceholder = getParamPlaceholder(3);
 
   return db.query<PostStatsRow>(
     `SELECT channel, status, COUNT(*) as count

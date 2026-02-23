@@ -26,8 +26,8 @@ export interface SchedulerRuntime {
 const DEFAULT_INTERVAL_MS = 30_000;
 const DEFAULT_BATCH_SIZE = 50;
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+function getParamPlaceholder(index: number): string {
+  return `$${index}`;
 }
 
 async function fetchDuePosts(
@@ -35,8 +35,8 @@ async function fetchDuePosts(
   nowIso: string,
   batchSize: number,
 ): Promise<ScheduledPostRow[]> {
-  const scheduledAtPlaceholder = getParamPlaceholder(db.dialect, 1);
-  const limitPlaceholder = getParamPlaceholder(db.dialect, 2);
+  const scheduledAtPlaceholder = getParamPlaceholder(1);
+  const limitPlaceholder = getParamPlaceholder(2);
   const sql = `SELECT id, customer_id, channel, scheduled_at, status
                FROM posts
                WHERE status = 'approved' AND scheduled_at <= ${scheduledAtPlaceholder}
@@ -47,8 +47,8 @@ async function fetchDuePosts(
 }
 
 async function markPostPublishing(db: DatabaseClient, postId: string, nowIso: string): Promise<void> {
-  const idPlaceholder = getParamPlaceholder(db.dialect, 1);
-  const updatedAtPlaceholder = getParamPlaceholder(db.dialect, 2);
+  const idPlaceholder = getParamPlaceholder(1);
+  const updatedAtPlaceholder = getParamPlaceholder(2);
   const sql = `UPDATE posts
                SET status = 'publishing', updated_at = ${updatedAtPlaceholder}
                WHERE id = ${idPlaceholder}`;

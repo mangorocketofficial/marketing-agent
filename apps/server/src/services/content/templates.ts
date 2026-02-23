@@ -1,16 +1,6 @@
-type OrganizationType =
-  | 'environment'
-  | 'education'
-  | 'human-rights'
-  | 'animal'
-  | 'welfare'
-  | 'health'
-  | 'culture'
-  | 'community'
-  | 'international'
-  | 'other';
-
-type PostChannel = 'naver-blog' | 'instagram' | 'threads' | 'nextjs-blog';
+import fs from 'node:fs';
+import path from 'node:path';
+import type { OrganizationType, PostChannel } from '@marketing-agent/shared';
 
 export interface TemplateContext {
   organizationType: OrganizationType;
@@ -84,6 +74,62 @@ const CHANNEL_TEMPLATE_BASE: Record<PostChannel, Omit<ContentTemplate, 'template
     ],
   },
 };
+
+let cachedGuidelinesMarkdown: string | null = null;
+
+function buildGuidelinesFallbackMarkdown(): string {
+  const organizationToneSection = Object.entries(ORGANIZATION_TONE)
+    .map(([organizationType, tone]) => `- ${organizationType}: ${tone}`)
+    .join('\n');
+
+  const channelSection = (Object.keys(CHANNEL_TEMPLATE_BASE) as PostChannel[])
+    .map((channel) => {
+      const template = CHANNEL_TEMPLATE_BASE[channel];
+      return [
+        `### ${channel}`,
+        `- Objective: ${template.objective}`,
+        `- Structure: ${template.structureGuide.join(' -> ')}`,
+        `- CTA: ${template.ctaExamples.join(' / ')}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+
+  return [
+    '# Channel Guidelines',
+    '',
+    '## Organization Tones',
+    organizationToneSection,
+    '',
+    '## Channel Structures',
+    channelSection,
+  ].join('\n');
+}
+
+function resolveGuidelinesPathCandidates(): string[] {
+  return [
+    path.resolve(process.cwd(), 'openclaw/prompts/channel-guidelines.md'),
+    path.resolve(process.cwd(), '../openclaw/prompts/channel-guidelines.md'),
+    path.resolve(__dirname, '../../../../openclaw/prompts/channel-guidelines.md'),
+  ];
+}
+
+export function getChannelGuidelinesMarkdown(): string {
+  if (cachedGuidelinesMarkdown !== null) {
+    return cachedGuidelinesMarkdown;
+  }
+
+  for (const candidate of resolveGuidelinesPathCandidates()) {
+    if (!fs.existsSync(candidate)) continue;
+    const raw = fs.readFileSync(candidate, 'utf8').trim();
+    if (raw) {
+      cachedGuidelinesMarkdown = raw;
+      return raw;
+    }
+  }
+
+  cachedGuidelinesMarkdown = buildGuidelinesFallbackMarkdown();
+  return cachedGuidelinesMarkdown;
+}
 
 export function getContentTemplate(context: TemplateContext): ContentTemplate {
   const channelTemplate = CHANNEL_TEMPLATE_BASE[context.channel];

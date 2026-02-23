@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import type { DatabaseClient } from '../../db';
-
-type PostChannel = 'naver-blog' | 'instagram' | 'threads' | 'nextjs-blog';
-type PostStatus = 'draft' | 'review' | 'approved' | 'publishing' | 'published' | 'failed';
+import { triggerAutoIngestForPublishedPost } from '../../services/content/ingest';
+import type { PostChannel, PostStatus } from '@marketing-agent/shared';
+import { asString, getParamPlaceholder, normalizeForDb } from '../../utils/db';
 
 interface Post {
   id: string;
@@ -19,6 +19,7 @@ interface Post {
   publishedUrl?: string;
   errorMessage?: string;
   retryCount: number;
+  idempotencyKey?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +38,7 @@ interface PostRow {
   published_url: string | null;
   error_message: string | null;
   retry_count: number;
+  idempotency_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -56,9 +58,7 @@ const ALLOWED_STATUS_TRANSITIONS: Record<PostStatus, PostStatus[]> = {
 };
 
 function parseJsonValue<T>(value: unknown, fallback: T): T {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
+  if (value === null || value === undefined) return fallback;
   if (typeof value === 'string') {
     try {
       return JSON.parse(value) as T;
@@ -84,17 +84,10 @@ function toPost(row: PostRow): Post {
     publishedUrl: row.published_url ?? undefined,
     errorMessage: row.error_message ?? undefined,
     retryCount: Number(row.retry_count ?? 0),
+    idempotencyKey: row.idempotency_key ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function normalizeForDb(value: unknown): string {
-  return JSON.stringify(value);
 }
 
 function isValidChannel(value: unknown): value is PostChannel {
@@ -114,19 +107,25 @@ function validatePostPayload(payload: PostPayload): string | null {
   if (!Array.isArray(payload.images)) return 'images must be an array';
   if (!Array.isArray(payload.tags)) return 'tags must be an array';
   if (!payload.scheduledAt) return 'scheduledAt is required';
+  if (payload.idempotencyKey !== undefined && typeof payload.idempotencyKey !== 'string') {
+    return 'idempotencyKey must be a string';
+  }
   return null;
 }
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+async function getPostById(db: DatabaseClient, id: string): Promise<Post | null> {
+  const sql = 'SELECT * FROM posts WHERE id = $1 LIMIT 1';
+  const rows = await db.query<PostRow>(sql, [id]);
+  return rows.length ? toPost(rows[0]) : null;
 }
 
-async function getPostById(db: DatabaseClient, id: string): Promise<Post | null> {
-  const sql =
-    db.dialect === 'postgres'
-      ? 'SELECT * FROM posts WHERE id = $1 LIMIT 1'
-      : 'SELECT * FROM posts WHERE id = ? LIMIT 1';
-  const rows = await db.query<PostRow>(sql, [id]);
+async function getPostByCustomerAndIdempotencyKey(
+  db: DatabaseClient,
+  customerId: string,
+  idempotencyKey: string,
+): Promise<Post | null> {
+  const sql = 'SELECT * FROM posts WHERE customer_id = $1 AND idempotency_key = $2 LIMIT 1';
+  const rows = await db.query<PostRow>(sql, [customerId, idempotencyKey]);
   return rows.length ? toPost(rows[0]) : null;
 }
 
@@ -143,23 +142,41 @@ export function createPostsRouter(db: DatabaseClient): Router {
 
     if (customerId) {
       params.push(customerId);
-      filters.push(`customer_id = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`customer_id = ${getParamPlaceholder(params.length)}`);
     }
     if (status) {
       params.push(status);
-      filters.push(`status = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`status = ${getParamPlaceholder(params.length)}`);
     }
     if (channel) {
       params.push(channel);
-      filters.push(`channel = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`channel = ${getParamPlaceholder(params.length)}`);
     }
 
     const whereSql = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+    const limitValue = Math.min(Math.max(1, Number(req.query.limit) || 50), 200);
+    const offsetValue = Math.max(0, Number(req.query.offset) || 0);
+
+    const filterParams = [...params];
+
+    params.push(limitValue);
+    const limitPlaceholder = getParamPlaceholder(params.length);
+    params.push(offsetValue);
+    const offsetPlaceholder = getParamPlaceholder(params.length);
+
     const rows = await db.query<PostRow>(
-      `SELECT * FROM posts ${whereSql} ORDER BY scheduled_at DESC, created_at DESC`,
+      `SELECT * FROM posts ${whereSql} ORDER BY scheduled_at DESC, created_at DESC LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
       params,
     );
 
+    const countRows = await db.query<{ total: string }>(
+      `SELECT COUNT(*) as total FROM posts ${whereSql}`,
+      filterParams,
+    );
+    const total = Number(countRows[0]?.total ?? 0);
+
+    res.setHeader('X-Total-Count', String(total));
     res.status(200).json(rows.map(toPost));
   });
 
@@ -189,6 +206,7 @@ export function createPostsRouter(db: DatabaseClient): Router {
       publishedUrl: asString(payload.publishedUrl) ?? undefined,
       errorMessage: asString(payload.errorMessage) ?? undefined,
       retryCount: typeof payload.retryCount === 'number' ? payload.retryCount : 0,
+      idempotencyKey: asString(payload.idempotencyKey) ?? undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -197,6 +215,14 @@ export function createPostsRouter(db: DatabaseClient): Router {
     if (validationError) {
       res.status(400).json({ message: validationError });
       return;
+    }
+
+    if (post.idempotencyKey) {
+      const existing = await getPostByCustomerAndIdempotencyKey(db, post.customerId, post.idempotencyKey);
+      if (existing) {
+        res.status(200).json(existing);
+        return;
+      }
     }
 
     const values = [
@@ -213,32 +239,24 @@ export function createPostsRouter(db: DatabaseClient): Router {
       post.publishedUrl ?? null,
       post.errorMessage ?? null,
       post.retryCount,
+      post.idempotencyKey ?? null,
       post.createdAt,
       post.updatedAt,
     ];
 
-    if (db.dialect === 'postgres') {
-      await db.execute(
-        `INSERT INTO posts (
-          id, customer_id, channel, status, title, content, images, tags, scheduled_at,
-          published_at, published_url, error_message, retry_count, created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9,
-          $10, $11, $12, $13, $14, $15
-        )`,
-        values,
-      );
-    } else {
-      await db.execute(
-        `INSERT INTO posts (
-          id, customer_id, channel, status, title, content, images, tags, scheduled_at,
-          published_at, published_url, error_message, retry_count, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        values,
-      );
-    }
+    await db.execute(
+      `INSERT INTO posts (
+        id, customer_id, channel, status, title, content, images, tags, scheduled_at,
+        published_at, published_url, error_message, retry_count, idempotency_key, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9,
+        $10, $11, $12, $13, $14, $15, $16
+      )`,
+      values,
+    );
 
     const created = await getPostById(db, post.id);
+    if (created) triggerAutoIngestForPublishedPost(db, created);
     res.status(201).json(created);
   });
 
@@ -255,6 +273,7 @@ export function createPostsRouter(db: DatabaseClient): Router {
       ...existing,
       ...payload,
       id: existing.id,
+      idempotencyKey: asString(payload.idempotencyKey) ?? existing.idempotencyKey,
       updatedAt: new Date().toISOString(),
     };
 
@@ -277,51 +296,33 @@ export function createPostsRouter(db: DatabaseClient): Router {
       updated.publishedUrl ?? null,
       updated.errorMessage ?? null,
       updated.retryCount,
+      updated.idempotencyKey ?? null,
       updated.updatedAt,
       targetId,
     ];
 
-    if (db.dialect === 'postgres') {
-      await db.execute(
-        `UPDATE posts SET
-          customer_id = $1,
-          channel = $2,
-          status = $3,
-          title = $4,
-          content = $5,
-          images = $6::jsonb,
-          tags = $7::jsonb,
-          scheduled_at = $8,
-          published_at = $9,
-          published_url = $10,
-          error_message = $11,
-          retry_count = $12,
-          updated_at = $13
-        WHERE id = $14`,
-        values,
-      );
-    } else {
-      await db.execute(
-        `UPDATE posts SET
-          customer_id = ?,
-          channel = ?,
-          status = ?,
-          title = ?,
-          content = ?,
-          images = ?,
-          tags = ?,
-          scheduled_at = ?,
-          published_at = ?,
-          published_url = ?,
-          error_message = ?,
-          retry_count = ?,
-          updated_at = ?
-        WHERE id = ?`,
-        values,
-      );
-    }
+    await db.execute(
+      `UPDATE posts SET
+        customer_id = $1,
+        channel = $2,
+        status = $3,
+        title = $4,
+        content = $5,
+        images = $6::jsonb,
+        tags = $7::jsonb,
+        scheduled_at = $8,
+        published_at = $9,
+        published_url = $10,
+        error_message = $11,
+        retry_count = $12,
+        idempotency_key = $13,
+        updated_at = $14
+      WHERE id = $15`,
+      values,
+    );
 
     const result = await getPostById(db, targetId);
+    if (result) triggerAutoIngestForPublishedPost(db, result);
     res.status(200).json(result);
   });
 
@@ -341,9 +342,7 @@ export function createPostsRouter(db: DatabaseClient): Router {
 
     const allowed = ALLOWED_STATUS_TRANSITIONS[existing.status];
     if (!allowed.includes(nextStatus)) {
-      res.status(400).json({
-        message: `Invalid status transition: ${existing.status} -> ${nextStatus}`,
-      });
+      res.status(400).json({ message: `Invalid status transition: ${existing.status} -> ${nextStatus}` });
       return;
     }
 
@@ -356,17 +355,13 @@ export function createPostsRouter(db: DatabaseClient): Router {
     const errorMessage = asString(req.body?.errorMessage) ?? null;
 
     const values = [nextStatus, publishedAt, publishedUrl, errorMessage, updatedAt, targetId];
-    const sql =
-      db.dialect === 'postgres'
-        ? `UPDATE posts
-           SET status = $1, published_at = $2, published_url = $3, error_message = $4, updated_at = $5
-           WHERE id = $6`
-        : `UPDATE posts
-           SET status = ?, published_at = ?, published_url = ?, error_message = ?, updated_at = ?
-           WHERE id = ?`;
+    const sql = `UPDATE posts
+                 SET status = $1, published_at = $2, published_url = $3, error_message = $4, updated_at = $5
+                 WHERE id = $6`;
     await db.execute(sql, values);
 
     const result = await getPostById(db, targetId);
+    if (result) triggerAutoIngestForPublishedPost(db, result);
     res.status(200).json(result);
   });
 
@@ -378,7 +373,7 @@ export function createPostsRouter(db: DatabaseClient): Router {
       return;
     }
 
-    const sql = db.dialect === 'postgres' ? 'DELETE FROM posts WHERE id = $1' : 'DELETE FROM posts WHERE id = ?';
+    const sql = 'DELETE FROM posts WHERE id = $1';
     await db.execute(sql, [targetId]);
     res.status(204).send();
   });

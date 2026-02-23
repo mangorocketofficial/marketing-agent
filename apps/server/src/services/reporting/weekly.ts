@@ -50,8 +50,8 @@ export interface WeeklyReportResult {
   formatted: FormattedReport;
 }
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+function getParamPlaceholder(index: number): string {
+  return `$${index}`;
 }
 
 function resolvePeriod(input?: Pick<CreateWeeklyReportInput, 'periodStart' | 'periodEnd'>): {
@@ -76,9 +76,9 @@ async function loadChannelStats(
   const rows = await db.query<StatsRow>(
     `SELECT channel, status, COUNT(*) as count
      FROM posts
-     WHERE customer_id = ${getParamPlaceholder(db.dialect, 1)}
-       AND created_at >= ${getParamPlaceholder(db.dialect, 2)}
-       AND created_at <= ${getParamPlaceholder(db.dialect, 3)}
+     WHERE customer_id = ${getParamPlaceholder(1)}
+       AND created_at >= ${getParamPlaceholder(2)}
+       AND created_at <= ${getParamPlaceholder(3)}
      GROUP BY channel, status`,
     [customerId, periodStart, periodEnd],
   );
@@ -142,20 +142,10 @@ async function insertReport(db: DatabaseClient, report: MarketingWeeklyReportPay
     summary: report.summary,
   });
 
-  if (db.dialect === 'postgres') {
-    await db.execute(
-      `INSERT INTO reports (
-        id, customer_id, type, period_start, period_end, payload, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
-      [report.id, report.customerId, report.type, report.periodStart, report.periodEnd, payload, report.createdAt],
-    );
-    return;
-  }
-
   await db.execute(
     `INSERT INTO reports (
       id, customer_id, type, period_start, period_end, payload, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
     [report.id, report.customerId, report.type, report.periodStart, report.periodEnd, payload, report.createdAt],
   );
 }

@@ -50,8 +50,8 @@ interface RecipientSummaryRow {
   mailable_recipients: number;
 }
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+function getParamPlaceholder(index: number): string {
+  return `$${index}`;
 }
 
 function normalizeStatusFromDb(status: string): RecipientStatus {
@@ -85,7 +85,7 @@ export async function getRecipientById(
   db: DatabaseClient,
   recipientId: string,
 ): Promise<RecipientRecord | null> {
-  const idPlaceholder = getParamPlaceholder(db.dialect, 1);
+  const idPlaceholder = getParamPlaceholder(1);
   const rows = await db.query<DonorRow>(`SELECT * FROM donors WHERE id = ${idPlaceholder} LIMIT 1`, [recipientId]);
   return rows.length ? toRecipient(rows[0]) : null;
 }
@@ -94,7 +94,7 @@ export async function listRecipientsByCustomer(
   db: DatabaseClient,
   customerId: string,
 ): Promise<RecipientRecord[]> {
-  const customerPlaceholder = getParamPlaceholder(db.dialect, 1);
+  const customerPlaceholder = getParamPlaceholder(1);
   const rows = await db.query<DonorRow>(
     `SELECT * FROM donors WHERE customer_id = ${customerPlaceholder} ORDER BY created_at DESC`,
     [customerId],
@@ -106,13 +106,12 @@ export async function listMailRecipients(
   db: DatabaseClient,
   customerId: string,
 ): Promise<MailRecipient[]> {
-  const customerPlaceholder = getParamPlaceholder(db.dialect, 1);
-  const receiveReportSql = db.dialect === 'postgres' ? 'TRUE' : '1';
+  const customerPlaceholder = getParamPlaceholder(1);
   const rows = await db.query<MailRecipient>(
     `SELECT id, name, email
      FROM donors
      WHERE customer_id = ${customerPlaceholder}
-       AND receive_report = ${receiveReportSql}
+       AND receive_report = TRUE
        AND status IN ('active', 'paused')
      ORDER BY created_at ASC`,
     [customerId],
@@ -128,20 +127,12 @@ export async function createRecipient(
   const recipientId = randomUUID();
   const dbStatus = normalizeStatusToDb(input.status);
 
-  const sql =
-    db.dialect === 'postgres'
-      ? `INSERT INTO donors (
-           id, customer_id, name, email, phone, donation_type, monthly_amount, total_donated,
-           status, receive_report, last_donated_at, created_at, updated_at
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-         )`
-      : `INSERT INTO donors (
-           id, customer_id, name, email, phone, donation_type, monthly_amount, total_donated,
-           status, receive_report, last_donated_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-  await db.execute(sql, [
+  await db.execute(`INSERT INTO donors (
+      id, customer_id, name, email, phone, donation_type, monthly_amount, total_donated,
+      status, receive_report, last_donated_at, created_at, updated_at
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    )`, [
     recipientId,
     input.customerId,
     input.name,
@@ -182,26 +173,14 @@ export async function updateRecipient(
   };
 
   const dbStatus = normalizeStatusToDb(merged.status);
-  const sql =
-    db.dialect === 'postgres'
-      ? `UPDATE donors SET
-           customer_id = $1,
-           name = $2,
-           email = $3,
-           status = $4,
-           receive_report = $5,
-           updated_at = $6
-         WHERE id = $7`
-      : `UPDATE donors SET
-           customer_id = ?,
-           name = ?,
-           email = ?,
-           status = ?,
-           receive_report = ?,
-           updated_at = ?
-         WHERE id = ?`;
-
-  await db.execute(sql, [
+  await db.execute(`UPDATE donors SET
+      customer_id = $1,
+      name = $2,
+      email = $3,
+      status = $4,
+      receive_report = $5,
+      updated_at = $6
+    WHERE id = $7`, [
     merged.customerId,
     merged.name,
     merged.email,
@@ -220,7 +199,7 @@ export async function removeRecipient(db: DatabaseClient, recipientId: string): 
     return false;
   }
 
-  const idPlaceholder = getParamPlaceholder(db.dialect, 1);
+  const idPlaceholder = getParamPlaceholder(1);
   await db.execute(`DELETE FROM donors WHERE id = ${idPlaceholder}`, [recipientId]);
   return true;
 }
@@ -229,8 +208,7 @@ export async function getRecipientSummary(
   db: DatabaseClient,
   customerId: string,
 ): Promise<RecipientSummary> {
-  const customerPlaceholder = getParamPlaceholder(db.dialect, 1);
-  const receiveReportSql = db.dialect === 'postgres' ? 'TRUE' : '1';
+  const customerPlaceholder = getParamPlaceholder(1);
 
   const rows = await db.query<RecipientSummaryRow>(
     `SELECT
@@ -238,7 +216,7 @@ export async function getRecipientSummary(
        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_recipients,
        SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END) AS paused_recipients,
        SUM(CASE WHEN status NOT IN ('active', 'paused') THEN 1 ELSE 0 END) AS unsubscribed_recipients,
-       SUM(CASE WHEN status IN ('active', 'paused') AND receive_report = ${receiveReportSql} THEN 1 ELSE 0 END) AS mailable_recipients
+       SUM(CASE WHEN status IN ('active', 'paused') AND receive_report = TRUE THEN 1 ELSE 0 END) AS mailable_recipients
      FROM donors
      WHERE customer_id = ${customerPlaceholder}`,
     [customerId],

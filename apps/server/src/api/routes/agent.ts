@@ -1,15 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
+import type { AgentTaskType, AgentTaskStatus } from '@marketing-agent/shared';
 import type { DatabaseClient } from '../../db';
-
-type AgentTaskType =
-  | 'marketing-strategy'
-  | 'schedule-posts'
-  | 'analyze-performance'
-  | 'competitor-report'
-  | 'donor-report';
-
-type AgentTaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+import { asString, getParamPlaceholder, normalizeForDb, parseJsonObject } from '../../utils/db';
 
 interface AgentTaskRow {
   id: string;
@@ -52,15 +45,12 @@ interface AgentTaskStatusPayload {
 const TASK_TYPES: AgentTaskType[] = [
   'marketing-strategy',
   'schedule-posts',
+  'request-content-generation',
   'analyze-performance',
   'competitor-report',
   'donor-report',
 ];
 const TASK_STATUSES: AgentTaskStatus[] = ['pending', 'running', 'completed', 'failed'];
-
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
 
 function isValidType(value: unknown): value is AgentTaskType {
   return typeof value === 'string' && TASK_TYPES.includes(value as AgentTaskType);
@@ -70,35 +60,14 @@ function isValidStatus(value: unknown): value is AgentTaskStatus {
   return typeof value === 'string' && TASK_STATUSES.includes(value as AgentTaskStatus);
 }
 
-function parseJsonObject(value: unknown): Record<string, unknown> | undefined {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
-}
-
-function normalizeForDb(value: unknown): string {
-  return JSON.stringify(value ?? null);
-}
-
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
-}
-
 function toTask(row: AgentTaskRow): AgentTaskRecord {
   return {
     id: row.id,
     customerId: row.customer_id,
     type: row.type as AgentTaskType,
     status: row.status as AgentTaskStatus,
-    input: parseJsonObject(row.input),
-    output: parseJsonObject(row.output),
+    input: parseJsonObject(row.input, true),
+    output: parseJsonObject(row.output, true),
     errorMessage: row.error_message ?? undefined,
     startedAt: row.started_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
@@ -107,9 +76,7 @@ function toTask(row: AgentTaskRow): AgentTaskRecord {
 }
 
 async function getTaskById(db: DatabaseClient, id: string): Promise<AgentTaskRecord | null> {
-  const sql = db.dialect === 'postgres'
-    ? 'SELECT * FROM agent_tasks WHERE id = $1 LIMIT 1'
-    : 'SELECT * FROM agent_tasks WHERE id = ? LIMIT 1';
+  const sql = 'SELECT * FROM agent_tasks WHERE id = $1 LIMIT 1';
   const rows = await db.query<AgentTaskRow>(sql, [id]);
   return rows.length ? toTask(rows[0]) : null;
 }
@@ -127,7 +94,7 @@ export function createAgentRouter(db: DatabaseClient): Router {
 
     if (customerId) {
       params.push(customerId);
-      filters.push(`customer_id = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`customer_id = ${getParamPlaceholder(params.length)}`);
     }
     if (type) {
       if (!isValidType(type)) {
@@ -135,7 +102,7 @@ export function createAgentRouter(db: DatabaseClient): Router {
         return;
       }
       params.push(type);
-      filters.push(`type = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`type = ${getParamPlaceholder(params.length)}`);
     }
     if (status) {
       if (!isValidStatus(status)) {
@@ -143,15 +110,33 @@ export function createAgentRouter(db: DatabaseClient): Router {
         return;
       }
       params.push(status);
-      filters.push(`status = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`status = ${getParamPlaceholder(params.length)}`);
     }
 
     const whereSql = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+    const limitValue = Math.min(Math.max(1, Number(req.query.limit) || 50), 200);
+    const offsetValue = Math.max(0, Number(req.query.offset) || 0);
+
+    const filterParams = [...params];
+
+    params.push(limitValue);
+    const limitPlaceholder = getParamPlaceholder(params.length);
+    params.push(offsetValue);
+    const offsetPlaceholder = getParamPlaceholder(params.length);
+
     const rows = await db.query<AgentTaskRow>(
-      `SELECT * FROM agent_tasks ${whereSql} ORDER BY created_at DESC`,
+      `SELECT * FROM agent_tasks ${whereSql} ORDER BY created_at DESC LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
       params,
     );
 
+    const countRows = await db.query<{ total: string }>(
+      `SELECT COUNT(*) as total FROM agent_tasks ${whereSql}`,
+      filterParams,
+    );
+    const total = Number(countRows[0]?.total ?? 0);
+
+    res.setHeader('X-Total-Count', String(total));
     res.status(200).json(rows.map(toTask));
   });
 
@@ -189,21 +174,12 @@ export function createAgentRouter(db: DatabaseClient): Router {
       now,
     ];
 
-    if (db.dialect === 'postgres') {
-      await db.execute(
-        `INSERT INTO agent_tasks (
-          id, customer_id, type, status, input, output, error_message, started_at, created_at
-        ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9)`,
-        values,
-      );
-    } else {
-      await db.execute(
-        `INSERT INTO agent_tasks (
-          id, customer_id, type, status, input, output, error_message, started_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        values,
-      );
-    }
+    await db.execute(
+      `INSERT INTO agent_tasks (
+        id, customer_id, type, status, input, output, error_message, started_at, created_at
+      ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9)`,
+      values,
+    );
 
     const created = await getTaskById(db, taskId);
     res.status(201).json(created);
@@ -237,29 +213,16 @@ export function createAgentRouter(db: DatabaseClient): Router {
       taskId,
     ];
 
-    if (db.dialect === 'postgres') {
-      await db.execute(
-        `UPDATE agent_tasks SET
-          status = $1,
-          output = $2::jsonb,
-          error_message = $3,
-          started_at = $4,
-          completed_at = $5
-        WHERE id = $6`,
-        values,
-      );
-    } else {
-      await db.execute(
-        `UPDATE agent_tasks SET
-          status = ?,
-          output = ?,
-          error_message = ?,
-          started_at = ?,
-          completed_at = ?
-        WHERE id = ?`,
-        values,
-      );
-    }
+    await db.execute(
+      `UPDATE agent_tasks SET
+        status = $1,
+        output = $2::jsonb,
+        error_message = $3,
+        started_at = $4,
+        completed_at = $5
+      WHERE id = $6`,
+      values,
+    );
 
     const updated = await getTaskById(db, taskId);
     res.status(200).json(updated);

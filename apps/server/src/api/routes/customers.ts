@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import type { DatabaseClient } from '../../db';
+import { triggerAutoIngestForCustomerProfile } from '../../services/content/ingest';
 
 type OrganizationType =
   | 'environment'
@@ -133,14 +134,11 @@ function validateCreatePayload(payload: CustomerPayload): string | null {
 }
 
 function normalizeForDb(db: DatabaseClient, value: unknown): unknown {
-  return db.dialect === 'sqlite' ? JSON.stringify(value) : JSON.stringify(value);
+  return JSON.stringify(value);
 }
 
 async function getCustomerById(db: DatabaseClient, id: string): Promise<Customer | null> {
-  const sql =
-    db.dialect === 'postgres'
-      ? 'SELECT * FROM customers WHERE id = $1 LIMIT 1'
-      : 'SELECT * FROM customers WHERE id = ? LIMIT 1';
+  const sql = 'SELECT * FROM customers WHERE id = $1 LIMIT 1';
   const rows = await db.query<CustomerRow>(sql, [id]);
   if (!rows.length) {
     return null;
@@ -196,30 +194,22 @@ export function createCustomersRouter(db: DatabaseClient): Router {
       now,
     ];
 
-    if (db.dialect === 'postgres') {
-      await db.execute(
-        `INSERT INTO customers (
-          id, name, organization_type, description, mission, keywords, location, schedule,
-          naver_blog_id, instagram_account, threads_account, blog_url, telegram_chat_id,
-          is_active, created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb,
-          $9, $10, $11, $12, $13, $14, $15, $16
-        )`,
-        values,
-      );
-    } else {
-      await db.execute(
-        `INSERT INTO customers (
-          id, name, organization_type, description, mission, keywords, location, schedule,
-          naver_blog_id, instagram_account, threads_account, blog_url, telegram_chat_id,
-          is_active, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        values,
-      );
-    }
+    await db.execute(
+      `INSERT INTO customers (
+        id, name, organization_type, description, mission, keywords, location, schedule,
+        naver_blog_id, instagram_account, threads_account, blog_url, telegram_chat_id,
+        is_active, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb,
+        $9, $10, $11, $12, $13, $14, $15, $16
+      )`,
+      values,
+    );
 
     const created = await getCustomerById(db, id);
+    if (created) {
+      triggerAutoIngestForCustomerProfile(db, { id: created.id });
+    }
     res.status(201).json(created);
   });
 
@@ -263,49 +253,30 @@ export function createCustomersRouter(db: DatabaseClient): Router {
       targetId,
     ];
 
-    if (db.dialect === 'postgres') {
-      await db.execute(
-        `UPDATE customers SET
-          name = $1,
-          organization_type = $2,
-          description = $3,
-          mission = $4,
-          keywords = $5::jsonb,
-          location = $6,
-          schedule = $7::jsonb,
-          naver_blog_id = $8,
-          instagram_account = $9,
-          threads_account = $10,
-          blog_url = $11,
-          telegram_chat_id = $12,
-          is_active = $13,
-          updated_at = $14
-        WHERE id = $15`,
-        values,
-      );
-    } else {
-      await db.execute(
-        `UPDATE customers SET
-          name = ?,
-          organization_type = ?,
-          description = ?,
-          mission = ?,
-          keywords = ?,
-          location = ?,
-          schedule = ?,
-          naver_blog_id = ?,
-          instagram_account = ?,
-          threads_account = ?,
-          blog_url = ?,
-          telegram_chat_id = ?,
-          is_active = ?,
-          updated_at = ?
-        WHERE id = ?`,
-        values,
-      );
-    }
+    await db.execute(
+      `UPDATE customers SET
+        name = $1,
+        organization_type = $2,
+        description = $3,
+        mission = $4,
+        keywords = $5::jsonb,
+        location = $6,
+        schedule = $7::jsonb,
+        naver_blog_id = $8,
+        instagram_account = $9,
+        threads_account = $10,
+        blog_url = $11,
+        telegram_chat_id = $12,
+        is_active = $13,
+        updated_at = $14
+      WHERE id = $15`,
+      values,
+    );
 
     const result = await getCustomerById(db, targetId);
+    if (result) {
+      triggerAutoIngestForCustomerProfile(db, { id: result.id });
+    }
     res.status(200).json(result);
   });
 
@@ -318,7 +289,7 @@ export function createCustomersRouter(db: DatabaseClient): Router {
       return;
     }
 
-    const sql = db.dialect === 'postgres' ? 'DELETE FROM customers WHERE id = $1' : 'DELETE FROM customers WHERE id = ?';
+    const sql = 'DELETE FROM customers WHERE id = $1';
     await db.execute(sql, [targetId]);
     res.status(204).send();
   });

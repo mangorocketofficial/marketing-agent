@@ -64,6 +64,7 @@ export const ORGANIZATION_TYPE_LABELS: Record<OrganizationType, string> = {
 export const AGENT_TASK_LABELS: Record<AgentTaskType, string> = {
   'marketing-strategy': '마케팅 전략 수립',
   'schedule-posts': '포스팅 스케줄링',
+  'request-content-generation': '콘텐츠 생성 요청',
   'analyze-performance': '성과 분석',
   'competitor-report': '경쟁업체 분석',
   'donor-report': '후원자 이메일 발송',

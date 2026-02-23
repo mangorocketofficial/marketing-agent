@@ -6,6 +6,7 @@ import { PostChannel } from './post';
 export type AgentTaskType =
   | 'marketing-strategy'       // 위클리 마케팅 전략 수립
   | 'schedule-posts'           // 포스팅 스케줄 계획
+  | 'request-content-generation' // 콘텐츠 생성 API 호출
   | 'analyze-performance'      // 성과 분석
   | 'competitor-report'        // 경쟁업체 분석
   | 'donor-report';            // 후원자 이메일 콘텐츠/발송 트리거

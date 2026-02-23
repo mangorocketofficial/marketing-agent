@@ -60,15 +60,12 @@ function toReport(row: ReportRow): ReportRecord {
   };
 }
 
-function getParamPlaceholder(dialect: DatabaseClient['dialect'], index: number): string {
-  return dialect === 'postgres' ? `$${index}` : '?';
+function getParamPlaceholder(index: number): string {
+  return `$${index}`;
 }
 
 async function getReportById(db: DatabaseClient, id: string): Promise<ReportRecord | null> {
-  const sql =
-    db.dialect === 'postgres'
-      ? 'SELECT * FROM reports WHERE id = $1 LIMIT 1'
-      : 'SELECT * FROM reports WHERE id = ? LIMIT 1';
+  const sql = 'SELECT * FROM reports WHERE id = $1 LIMIT 1';
   const rows = await db.query<ReportRow>(sql, [id]);
   return rows.length ? toReport(rows[0]) : null;
 }
@@ -87,7 +84,7 @@ export function createReportsRouter(db: DatabaseClient): Router {
 
     if (customerId) {
       params.push(customerId);
-      filters.push(`customer_id = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`customer_id = ${getParamPlaceholder(params.length)}`);
     }
     if (type) {
       if (!isValidReportType(type)) {
@@ -95,15 +92,15 @@ export function createReportsRouter(db: DatabaseClient): Router {
         return;
       }
       params.push(type);
-      filters.push(`type = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`type = ${getParamPlaceholder(params.length)}`);
     }
     if (periodStart) {
       params.push(periodStart);
-      filters.push(`period_start >= ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`period_start >= ${getParamPlaceholder(params.length)}`);
     }
     if (periodEnd) {
       params.push(periodEnd);
-      filters.push(`period_end <= ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`period_end <= ${getParamPlaceholder(params.length)}`);
     }
 
     const whereSql = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
@@ -124,7 +121,7 @@ export function createReportsRouter(db: DatabaseClient): Router {
 
     if (customerId) {
       params.push(customerId);
-      filters.push(`customer_id = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`customer_id = ${getParamPlaceholder(params.length)}`);
     }
     if (type) {
       if (!isValidReportType(type)) {
@@ -132,7 +129,7 @@ export function createReportsRouter(db: DatabaseClient): Router {
         return;
       }
       params.push(type);
-      filters.push(`type = ${getParamPlaceholder(db.dialect, params.length)}`);
+      filters.push(`type = ${getParamPlaceholder(params.length)}`);
     }
 
     const whereSql = filters.length ? `WHERE ${filters.join(' AND ')}` : '';

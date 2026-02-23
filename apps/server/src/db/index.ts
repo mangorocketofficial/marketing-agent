@@ -1,107 +1,18 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { config as loadEnv } from 'dotenv';
 import { Pool } from 'pg';
 import type { QueryResultRow } from 'pg';
-import sqlite3 from 'sqlite3';
-import { getMigrationSql, type SqlDialect } from './schema';
+import { migrationPlan } from './schema';
 
 loadEnv();
 
-const DEFAULT_SQLITE_URL = 'file:./data/dev.db';
+const DEFAULT_POSTGRES_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/marketing_agent';
 
 export interface DatabaseClient {
-  dialect: SqlDialect;
+  dialect: 'postgres';
   execute: (sql: string, params?: unknown[]) => Promise<void>;
   query: <T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]) => Promise<T[]>;
   healthCheck: () => Promise<boolean>;
   close: () => Promise<void>;
-}
-
-function detectDialect(databaseUrl: string): SqlDialect {
-  if (databaseUrl.startsWith('postgres://') || databaseUrl.startsWith('postgresql://')) {
-    return 'postgres';
-  }
-  return 'sqlite';
-}
-
-function resolveSqlitePath(databaseUrl: string): string {
-  const raw = databaseUrl.startsWith('file:') ? databaseUrl.slice(5) : databaseUrl;
-  if (!raw || raw === ':memory:') {
-    return ':memory:';
-  }
-
-  const absolutePath = path.resolve(process.cwd(), raw);
-  const directory = path.dirname(absolutePath);
-  fs.mkdirSync(directory, { recursive: true });
-  return absolutePath;
-}
-
-async function createSqliteClient(databaseUrl: string): Promise<DatabaseClient> {
-  const sqliteFile = resolveSqlitePath(databaseUrl);
-  const db = new sqlite3.Database(sqliteFile);
-
-  const exec = (sql: string) =>
-    new Promise<void>((resolve, reject) => {
-      db.exec(sql, (error: Error | null) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  const run = (sql: string, params: unknown[] = []) =>
-    new Promise<void>((resolve, reject) => {
-      db.run(sql, params as [], (error: Error | null) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  const all = <T>(sql: string, params: unknown[] = []) =>
-    new Promise<T[]>((resolve, reject) => {
-      db.all(sql, params, (error: Error | null, rows: unknown[]) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(rows as T[]);
-      });
-    });
-
-  const close = () =>
-    new Promise<void>((resolve, reject) => {
-      db.close((error: Error | null) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
-
-  await exec('PRAGMA foreign_keys = ON;');
-
-  return {
-    dialect: 'sqlite',
-    execute: (sql, params = []) => (params.length ? run(sql, params) : exec(sql)),
-    query: <T extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []) =>
-      all<T>(sql, params),
-    healthCheck: async () => {
-      try {
-        await all('SELECT 1 as ok;');
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    close,
-  };
 }
 
 async function createPostgresClient(databaseUrl: string): Promise<DatabaseClient> {
@@ -131,20 +42,35 @@ async function createPostgresClient(databaseUrl: string): Promise<DatabaseClient
 }
 
 async function runMigrations(client: DatabaseClient): Promise<void> {
-  const migrationSql = getMigrationSql(client.dialect);
-  for (const sql of migrationSql) {
-    await client.execute(sql);
+  await client.execute(`
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`);
+
+  const appliedRows = await client.query<{ id: string }>('SELECT id FROM schema_migrations');
+  const applied = new Set(appliedRows.map((row) => row.id));
+
+  for (const step of migrationPlan) {
+    if (applied.has(step.id)) {
+      continue;
+    }
+
+    await client.execute(step.sql.postgres.trim());
+    await client.execute('INSERT INTO schema_migrations (id) VALUES ($1)', [step.id]);
   }
 }
 
 export async function createDatabaseClient(databaseUrl?: string): Promise<DatabaseClient> {
-  const resolvedUrl = databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_SQLITE_URL;
-  const dialect = detectDialect(resolvedUrl);
-
-  if (dialect === 'postgres') {
-    return createPostgresClient(resolvedUrl);
+  const resolvedUrl = databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_POSTGRES_URL;
+  const normalized = resolvedUrl.toLowerCase();
+  const isPostgresUrl =
+    normalized.startsWith('postgres://') || normalized.startsWith('postgresql://');
+  if (!isPostgresUrl) {
+    throw new Error('DATABASE_URL must be a PostgreSQL connection string (postgres:// or postgresql://)');
   }
-  return createSqliteClient(resolvedUrl);
+
+  return createPostgresClient(resolvedUrl);
 }
 
 export async function initDatabase(databaseUrl?: string): Promise<DatabaseClient> {

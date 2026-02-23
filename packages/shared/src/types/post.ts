@@ -28,6 +28,7 @@ export interface Post {
 
   errorMessage?: string;       // 실패 시 에러 메시지
   retryCount: number;          // 재시도 횟수
+  idempotencyKey?: string;     // 동일 전략 실행 재시도 시 중복 생성 방지용 키
 
   createdAt: string;
   updatedAt: string;

@@ -7,6 +7,7 @@ export interface SchedulePostInputItem {
   title: string;
   content: string;
   scheduledAt: string;
+  idempotencyKey?: string;
   images?: string[];
   tags?: string[];
   status?: PostStatus;
@@ -127,6 +128,7 @@ function toCreatePayload(customerId: string, item: SchedulePostInputItem): Recor
     images: item.images ?? [],
     tags: item.tags ?? [],
     scheduledAt: item.scheduledAt,
+    idempotencyKey: item.idempotencyKey,
   };
 }
 
